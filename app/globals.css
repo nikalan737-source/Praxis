@@ -1,0 +1,73 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+  Praxis light palette — matched to logo background rgb(248,251,253)
+  --background  #F8FBFD  →  205 55% 98%   (logo background)
+  --card        #FFFFFF  →  0 0% 100%     (white cards)
+  --foreground  #02264C  →  204 95% 15%   (dark navy from logo text)
+  --primary     keeps bright blue for CTAs
+*/
+
+:root {
+  /* ── Core ── */
+  --background:             204 56% 98%;   /* #F8FBFD — exact logo background rgb(248,251,253) */
+  --foreground:             204 95% 15%;   /* #02264C — logo navy text */
+
+  /* ── Card / surface ── */
+  --card:                   0 0% 100%;     /* white */
+  --card-foreground:        204 95% 15%;
+  --surface:                205 40% 95%;   /* very light blue-grey */
+
+  /* ── Popover ── */
+  --popover:                0 0% 100%;
+  --popover-foreground:     204 95% 15%;
+
+  /* ── Primary (CTA — bright blue, good contrast on light bg) ── */
+  --primary:                207 80% 32%;
+  --primary-foreground:     0 0% 100%;
+
+  /* ── Secondary ── */
+  --secondary:              205 35% 92%;
+  --secondary-foreground:   204 60% 20%;
+
+  /* ── Muted ── */
+  --muted:                  205 35% 93%;
+  --muted-foreground:       205 25% 45%;
+
+  /* ── Accent ── */
+  --accent:                 207 60% 88%;
+  --accent-foreground:      204 95% 15%;
+
+  /* ── Destructive ── */
+  --destructive:            0 65% 52%;
+  --destructive-foreground: 0 0% 100%;
+
+  /* ── Border / Input ── */
+  --border:                 205 30% 88%;
+  --input:                  205 35% 95%;
+  --ring:                   207 80% 32%;
+
+  /* ── Radius ── */
+  --radius:                 0.75rem;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground font-sans;
+    font-feature-settings: "rlig" 1, "calt" 1;
+    line-height: 1.6;
+  }
+}
+
+/* Utility classes for the three font roles */
+.font-display {
+  font-family: "Gloock", Georgia, serif;
+}
+.font-mono {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+}
