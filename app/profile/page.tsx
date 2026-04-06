@@ -14,7 +14,7 @@ import { LoginModal } from "@/components/LoginModal";
 import type { TheoryBlock } from "@/types/theory-block";
 import type { ExperimentLog } from "@/types/experiment-log";
 import type { PublicLog, LogComment } from "@/types/experiment-log";
-import { ALL_DAYS, todayISO, weekDates } from "@/lib/types";
+import { ALL_DAYS, todayISO, weekDates, monthDates } from "@/lib/types";
 import type { Habit, HabitCompletion } from "@/lib/types";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -144,6 +144,7 @@ function HabitSchedulePicker({
         body: JSON.stringify({
           actionText,
           goalCategory,
+          evidenceTier,
           theoryId,
           theoryTitle,
           frequency,
@@ -235,14 +236,17 @@ function HabitSchedulePicker({
 function HabitsTab() {
   const [habits, setHabits] = useState<Habit[]>([]);
   const [completions, setCompletions] = useState<HabitCompletion[]>([]);
+  const [monthCompletions, setMonthCompletions] = useState<HabitCompletion[]>([]);
   const [loading, setLoading] = useState(true);
   const [completing, setCompleting] = useState<Set<string>>(new Set());
   const [selectedDayIdx, setSelectedDayIdx] = useState(0);
   const [showAllHabits, setShowAllHabits] = useState(false);
+  const [showCalendar, setShowCalendar] = useState(false);
 
   const today = todayISO();
   const week = weekDates(today);
   const todayIdx = week.indexOf(today);
+  const monthDays = monthDates(today);
 
   useEffect(() => {
     setSelectedDayIdx(todayIdx >= 0 ? todayIdx : 0);
@@ -251,18 +255,23 @@ function HabitsTab() {
   const weekFrom = week[0];
   const weekTo = week[6];
 
+  const monthFrom = monthDays[0];
+  const monthTo = monthDays[monthDays.length - 1];
+
   const fetchAll = useCallback(async () => {
     setLoading(true);
     try {
-      const [hRes, cRes] = await Promise.all([
+      const [hRes, cRes, mRes] = await Promise.all([
         fetch("/api/habits"),
         fetch(`/api/habits/completions?from=${weekFrom}&to=${weekTo}`),
+        fetch(`/api/habits/completions?from=${monthFrom}&to=${monthTo}`),
       ]);
       if (hRes.ok) setHabits(await hRes.json());
       if (cRes.ok) setCompletions(await cRes.json());
+      if (mRes.ok) setMonthCompletions(await mRes.json());
     } catch { /* silent */ }
     setLoading(false);
-  }, [weekFrom, weekTo]);
+  }, [weekFrom, weekTo, monthFrom, monthTo]);
 
   useEffect(() => { void fetchAll(); }, [fetchAll]);
 
@@ -420,6 +429,17 @@ function HabitsTab() {
                       <p className="text-xs text-muted-foreground mt-0.5 truncate">{habit.theoryTitle}</p>
                     )}
                     <div className="flex flex-wrap gap-1 mt-1.5">
+                      {habit.evidenceTier && (
+                        <span className={cn(
+                          "text-[10px] rounded px-1.5 py-0.5 font-medium",
+                          habit.evidenceTier === "Strong" ? "text-emerald-400 bg-emerald-500/10" :
+                          habit.evidenceTier === "Emerging" ? "text-amber-400 bg-amber-500/10" :
+                          habit.evidenceTier === "Theoretical" ? "text-blue-400 bg-blue-500/10" :
+                          "text-rose-400 bg-rose-500/10"
+                        )}>
+                          {habit.evidenceTier}
+                        </span>
+                      )}
                       {habit.frequency === "daily" ? (
                         <span className="text-[10px] text-emerald-400 bg-emerald-500/10 rounded px-1.5 py-0.5">daily</span>
                       ) : (
@@ -445,6 +465,90 @@ function HabitsTab() {
         )}
       </div>
 
+      {/* Monthly calendar (expandable) */}
+      <div>
+        <button
+          type="button"
+          onClick={() => setShowCalendar((v) => !v)}
+          className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+        >
+          {showCalendar ? "▲ Hide calendar" : "▼ Monthly overview"}
+        </button>
+
+        {showCalendar && (
+          <div className="mt-3">
+            {(() => {
+              const d = new Date(today + "T12:00:00");
+              const monthLabel = d.toLocaleString("default", { month: "long", year: "numeric" });
+              // What day of week does the 1st fall on? (0=Sun)
+              const firstDow = new Date(d.getFullYear(), d.getMonth(), 1).getDay();
+              // Shift so Mon=0
+              const startOffset = firstDow === 0 ? 6 : firstDow - 1;
+
+              return (
+                <div>
+                  <p className="text-xs font-semibold text-foreground mb-2">{monthLabel}</p>
+                  <div className="grid grid-cols-7 gap-1">
+                    {ALL_DAYS.map((day) => (
+                      <span key={day} className="text-[10px] text-muted-foreground text-center font-medium">{day.slice(0, 2)}</span>
+                    ))}
+                    {/* Empty cells before month starts */}
+                    {Array.from({ length: startOffset }).map((_, i) => (
+                      <div key={`empty-${i}`} />
+                    ))}
+                    {monthDays.map((date) => {
+                      const dayNum = date.slice(-2).replace(/^0/, "");
+                      const isDateToday = date === today;
+                      const isPast = date <= today;
+                      // Count completions for this date
+                      const dayCompletions = monthCompletions.filter((c) => c.completedDate === date);
+                      // Count total habits scheduled for this day's day-of-week
+                      const dow = new Date(date + "T12:00:00").getDay();
+                      const dayIdx = dow === 0 ? 6 : dow - 1;
+                      const scheduled = habitsForDayIdx(habits, dayIdx);
+                      const total = scheduled.length;
+                      const completed = dayCompletions.length;
+
+                      let dotColor = "bg-transparent";
+                      if (isPast && total > 0) {
+                        if (completed >= total) dotColor = "bg-emerald-500";
+                        else if (completed > 0) dotColor = "bg-amber-500";
+                        else dotColor = "bg-border";
+                      }
+
+                      return (
+                        <div
+                          key={date}
+                          className={cn(
+                            "flex flex-col items-center py-1 rounded text-[11px]",
+                            isDateToday && "ring-1 ring-primary/50"
+                          )}
+                        >
+                          <span className={cn(
+                            "font-mono",
+                            isDateToday ? "text-primary font-bold" : isPast ? "text-foreground/70" : "text-muted-foreground/50"
+                          )}>
+                            {dayNum}
+                          </span>
+                          {total > 0 && isPast && (
+                            <span className={cn("w-1.5 h-1.5 rounded-full mt-0.5", dotColor)} />
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="flex items-center gap-3 mt-2 text-[10px] text-muted-foreground">
+                    <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> All done</span>
+                    <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-amber-500" /> Partial</span>
+                    <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-border" /> None</span>
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+        )}
+      </div>
+
       {/* All protocols (collapsible) */}
       <div>
         <button
@@ -465,6 +569,17 @@ function HabitsTab() {
                     <p className="text-xs text-muted-foreground mt-0.5 truncate">{habit.theoryTitle}</p>
                   )}
                   <div className="flex flex-wrap gap-1 mt-1">
+                    {habit.evidenceTier && (
+                      <span className={cn(
+                        "text-[10px] rounded px-1.5 py-0.5 font-medium",
+                        habit.evidenceTier === "Strong" ? "text-emerald-400 bg-emerald-500/10" :
+                        habit.evidenceTier === "Emerging" ? "text-amber-400 bg-amber-500/10" :
+                        habit.evidenceTier === "Theoretical" ? "text-blue-400 bg-blue-500/10" :
+                        "text-rose-400 bg-rose-500/10"
+                      )}>
+                        {habit.evidenceTier}
+                      </span>
+                    )}
                     {habit.frequency === "daily" ? (
                       <span className="text-[10px] text-emerald-400 bg-emerald-500/10 rounded px-1.5 py-0.5">daily</span>
                     ) : (

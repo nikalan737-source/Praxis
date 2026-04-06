@@ -46,7 +46,8 @@ export type GenerateResult = {
 };
 
 export type EvaluateResult = {
-  block: TheoryBlock;
+  block: TheoryBlock;           // legacy single-block
+  blocks?: TheoryBlock[];       // multi-block segmented by tier
   articles: PubMedArticle[];
   searchQuery: string;
 };

@@ -26,6 +26,7 @@ export async function GET() {
         theoryId: h.theory_id ?? undefined,
         theoryTitle: h.theory_title ?? undefined,
         goalCategory: h.goal_category ?? undefined,
+        evidenceTier: h.evidence_tier ?? undefined,
         actionText: h.action_text,
         frequency: h.frequency,
         scheduledDays: h.scheduled_days ?? [],
@@ -54,6 +55,7 @@ export async function POST(request: NextRequest) {
       theoryId,
       theoryTitle,
       goalCategory,
+      evidenceTier,
       actionText,
       frequency,
       scheduledDays,
@@ -61,6 +63,7 @@ export async function POST(request: NextRequest) {
       theoryId?: string;
       theoryTitle?: string;
       goalCategory?: string;
+      evidenceTier?: string;
       actionText: string;
       frequency: string;
       scheduledDays: string[];
@@ -77,6 +80,7 @@ export async function POST(request: NextRequest) {
         theory_id: theoryId ?? null,
         theory_title: theoryTitle ?? null,
         goal_category: goalCategory ?? null,
+        evidence_tier: evidenceTier ?? null,
         action_text: actionText,
         frequency: frequency ?? "daily",
         scheduled_days: scheduledDays ?? [],
@@ -93,6 +97,7 @@ export async function POST(request: NextRequest) {
       theoryId: data.theory_id ?? undefined,
       theoryTitle: data.theory_title ?? undefined,
       goalCategory: data.goal_category ?? undefined,
+      evidenceTier: data.evidence_tier ?? undefined,
       actionText: data.action_text,
       frequency: data.frequency,
       scheduledDays: data.scheduled_days ?? [],

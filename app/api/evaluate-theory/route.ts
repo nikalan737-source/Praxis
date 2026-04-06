@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
-import { EvaluateResultSchema } from "@/lib/theory-block-schema";
+import { EvaluateMultiResultSchema } from "@/lib/theory-block-schema";
 import type { PubMedArticle } from "@/types/theory-block";
 
 const openai = () => {
@@ -91,7 +91,7 @@ async function searchPubMed(queries: string[]): Promise<PubMedArticle[]> {
   return fetchArticles(allIds.slice(0, 15));
 }
 
-// ── Step 3: AI evaluation prompt ─────────────────────────────────────────────
+// ── Step 3: AI evaluation prompt (multi-block by tier) ──────────────────────
 
 function buildEvalPrompt(
   title: string, goal: string, theory: string,
@@ -103,63 +103,82 @@ function buildEvalPrompt(
       articles.map((a) => `[PMID ${a.pmid}] "${a.title}" — ${a.authors} (${a.year}, ${a.source})`).join("\n")
     : "\n\nNo directly matching PubMed articles found. Evaluate using general scientific knowledge.";
 
-  return `You are a scientific peer reviewer evaluating a user-submitted health theory. Your job is to cross-reference it with available evidence and give an honest, useful analysis.
+  return `You are a scientific peer reviewer evaluating a user-submitted health theory. Your job is to analyze the theory thoroughly and SEGMENT IT into separate theory blocks based on how well-supported each component is by evidence.
 
 USER'S THEORY:
 - Title: "${title}"
 - Health goal: "${goal}"
 - Category: "${category}"
 - Their theory: "${theory}"
-- Their proposed protocol: "${protocol || "Not specified"}"
+${protocol ? `- Their proposed protocol: "${protocol}"` : ""}
 ${articleContext}
 
-Evaluate this theory and return a single JSON object (no markdown, no code fences):
+IMPORTANT INSTRUCTIONS:
+
+1. EXTRACT PROTOCOLS AUTOMATICALLY: The user's theory text likely contains specific supplements, dosages, lifestyle changes, timing, and protocols embedded within it. You MUST extract ALL of these and turn them into structured interventions. Do NOT ask for a separate protocol — pull everything actionable from the theory text itself. If the theory mentions "400mg magnesium glycinate before bed," that becomes an intervention.
+
+2. SEGMENT BY EVIDENCE: Break the theory into MULTIPLE blocks — one per evidence tier that applies. A user's theory often contains parts that are well-supported AND parts that are speculative. Separate these into distinct blocks.
+
+For example, if a theory says "take magnesium and drink moonwater for sleep" — the magnesium part might be "Strong" evidence tier, while moonwater would be "Unsupported". These should become TWO separate blocks.
+
+3. Generate 2-4 blocks. You MUST have at least 2 blocks with different evidence tiers. Each block should focus on a different aspect of the theory.
+
+4. Each block should have MANY interventions/protocols (5-10 per block when applicable). Be thorough — users want comprehensive, actionable protocols. Include supplement dosages, timing, dietary changes, lifestyle modifications, etc. ALSO suggest additional protocols that the user didn't mention but that are supported by the research for their goal.
+
+Return a JSON object (no markdown, no code fences):
 {
-  "block": {
-    "id": "user-${Date.now()}",
-    "title": "${title}",
-    "goalCategory": "${category}",
-    "goalStatement": "one sentence restatement of their goal",
-    "evidenceTier": "Strong|Emerging|Theoretical|Unsupported",
-    "riskLevel": "Low|Moderate|High",
-    "reversibility": "High|Medium|Low",
-    "mechanismSummary": "2-3 sentences: explain the underlying biology honestly — what could be true and what is uncertain",
-    "keyInsight": "the most important takeaway from your evaluation — what is the single most useful thing to know about this theory?",
-    "aiOverview": "3-5 sentences: a frank AI analysis — what parts of the theory align with evidence, where it diverges, what the actual risks are, and what a scientist would say. Be specific about which PMIDs support or contradict claims. Avoid being dismissive — acknowledge genuine insight even in speculative theories.",
-    "actionSteps": [
-      "3-5 immediately actionable things someone can do TODAY to act on this theory. Be specific: quantities, timing, exact activities, and the mechanistic reason. Format each as 'Concrete action — why it works'. Examples: 'Take 400mg magnesium glycinate before bed — lowers PTH overnight, reducing melanin breakdown', 'Eat 100g calf liver weekly — provides copper and retinol, both cofactors for melanin synthesis'"
-    ],
-    "references": ["<pmid>"],
-    "createdType": "user_created",
-    "interventions": [{
-      "tier": "<evidenceTier>",
-      "name": "string — name the protocol clearly",
-      "mechanism": "string",
-      "steps": ["string"],
-      "durationDays": 14,
-      "trackingMetrics": ["string"],
-      "expectedMagnitude": "Small|Medium|Large",
+  "blocks": [
+    {
+      "id": "user-eval-${Date.now()}-1",
+      "title": "descriptive title for THIS aspect of the theory",
+      "goalCategory": "${category}",
+      "goalStatement": "one sentence goal specific to this aspect",
+      "evidenceTier": "Strong|Emerging|Theoretical|Unsupported",
       "riskLevel": "Low|Moderate|High",
       "reversibility": "High|Medium|Low",
-      "contraindications": ["string"]
-    }],
-    "tags": ["string"],
-    "traction": { "saves": 0, "experimentLogs": 0, "avgOutcome": 0 }
-  }
+      "mechanismSummary": "2-3 sentences: explain the underlying biology for this specific aspect",
+      "keyInsight": "the most important takeaway for this aspect",
+      "aiOverview": "3-5 sentences: frank AI analysis for this aspect. Cite specific PMIDs. Be specific about what evidence supports or contradicts this.",
+      "actionSteps": [
+        "5-8 immediately actionable things — be VERY specific: exact dosages, timing, quantities, specific foods/supplements, and the mechanistic reason. Format: 'Concrete action — why it works'"
+      ],
+      "references": ["<pmid>"],
+      "createdType": "user_created",
+      "userTheoryText": "${theory.replace(/"/g, '\\"').slice(0, 200)}...",
+      "interventions": [
+        {
+          "tier": "<same evidenceTier as block>",
+          "name": "specific protocol name",
+          "mechanism": "how it works biologically",
+          "steps": ["step 1", "step 2", "step 3"],
+          "durationDays": 30,
+          "trackingMetrics": ["metric1", "metric2"],
+          "expectedMagnitude": "Small|Medium|Large",
+          "riskLevel": "Low|Moderate|High",
+          "reversibility": "High|Medium|Low",
+          "contraindications": ["if any"]
+        }
+      ],
+      "tags": ["tag1", "tag2"],
+      "traction": { "saves": 0, "experimentLogs": 0, "avgOutcome": 0 }
+    }
+  ]
 }
 
 Evidence tier assignment:
 - Strong: core mechanism backed by multiple robust studies in the PubMed list
 - Emerging: some supporting evidence but limited, preliminary, or indirect
 - Theoretical: mechanistically plausible but little or no direct evidence
-- Unsupported: contradicts established evidence or is purely speculative with no plausible mechanism
+- Unsupported: contradicts established evidence or is purely speculative
 
 Rules:
-- Be honest — if the theory is speculative, say Theoretical or Unsupported
-- aiOverview must cite specific PMIDs when relevant (e.g. "PMID 12345 suggests...")
-- If no PMIDs are relevant, say so explicitly in aiOverview
-- keyInsight should be the single most actionable or surprising finding
-- interventions should faithfully reflect the user's proposed protocol, structured safely`;
+- Generate 2-4 blocks with DIFFERENT evidence tiers
+- Each block should have 5-10 interventions when the theory is comprehensive
+- Each block should have 5-8 action steps
+- Be honest — if parts are speculative, put them in their own Theoretical/Unsupported block
+- aiOverview must cite specific PMIDs when relevant
+- interventions should be thorough and comprehensive — include everything relevant
+- Each intervention's tier should match its parent block's evidenceTier`;
 }
 
 async function callOpenAI(
@@ -211,7 +230,7 @@ export async function POST(request: NextRequest) {
     // Step 2: Search PubMed
     const articles = await searchPubMed(queries);
 
-    // Step 3: Evaluate
+    // Step 3: Evaluate (multi-block)
     let raw: string;
     try {
       raw = await callOpenAI(title.trim(), goal.trim(), theory.trim(), protocol?.trim() ?? "", categoryNorm, articles);
@@ -227,10 +246,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invalid JSON from model." }, { status: 502 });
     }
 
-    const first = EvaluateResultSchema.safeParse(parsed);
+    const first = EvaluateMultiResultSchema.safeParse(parsed);
     if (first.success) {
+      const blocks = first.data.blocks.map((b) => ({
+        ...b,
+        userTheoryText: theory.trim(),
+        createdType: "user_created" as const,
+      }));
       return NextResponse.json({
-        block: { ...first.data.block, userTheoryText: theory.trim(), createdType: "user_created" },
+        block: blocks[0], // backwards compat
+        blocks,
         articles,
         searchQuery: queries.join(" · "),
       });
@@ -250,10 +275,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invalid JSON from model." }, { status: 502 });
     }
 
-    const repair = EvaluateResultSchema.safeParse(repairParsed);
+    const repair = EvaluateMultiResultSchema.safeParse(repairParsed);
     if (repair.success) {
+      const blocks = repair.data.blocks.map((b) => ({
+        ...b,
+        userTheoryText: theory.trim(),
+        createdType: "user_created" as const,
+      }));
       return NextResponse.json({
-        block: { ...repair.data.block, userTheoryText: theory.trim(), createdType: "user_created" },
+        block: blocks[0],
+        blocks,
         articles,
         searchQuery: queries.join(" · "),
       });

@@ -318,13 +318,14 @@ function CreatePageContent() {
   const [ownTitle, setOwnTitle] = useState("");
   const [ownGoal, setOwnGoal] = useState("");
   const [ownTheory, setOwnTheory] = useState("");
-  const [ownProtocol, setOwnProtocol] = useState("");
   const [ownCategory, setOwnCategory] = useState("Physical");
   const [ownResult, setOwnResult] = useState<EvaluateResult | null>(null);
   const [ownLoading, setOwnLoading] = useState(false);
   const [ownError, setOwnError] = useState<string | null>(null);
   const [ownPublished, setOwnPublished] = useState(false);
   const [ownPublishing, setOwnPublishing] = useState(false);
+  const [ownPublishedIds, setOwnPublishedIds] = useState<Set<string>>(new Set());
+  const [ownPublishingId, setOwnPublishingId] = useState<string | null>(null);
   const [pendingOwnPublish, setPendingOwnPublish] = useState(false);
 
   const TIERS: TheoryBlock["evidenceTier"][] = ["Strong", "Emerging", "Theoretical", "Unsupported"];
@@ -483,7 +484,7 @@ function CreatePageContent() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           title: ownTitle.trim(), goal: ownGoal.trim(),
-          theory: ownTheory.trim(), protocol: ownProtocol.trim(), category: ownCategory,
+          theory: ownTheory.trim(), protocol: "", category: ownCategory,
         }),
       });
       const data = await res.json();
@@ -497,6 +498,7 @@ function CreatePageContent() {
     if (!ownResult) return;
     setOwnPublishing(true);
     setOwnError(null);
+    // Publish the first block for backwards compat
     const res = await fetch("/api/publish", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -518,6 +520,31 @@ function CreatePageContent() {
     setOwnPublishing(false);
   }
 
+  async function doPublishOwnBlock(block: TheoryBlock) {
+    if (!ownResult) return;
+    setOwnPublishingId(block.id);
+    setOwnError(null);
+    const res = await fetch("/api/publish", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(block),
+    });
+    if (!res.ok) {
+      if (res.status === 401) {
+        sessionStorage.setItem(UNPUBLISHED_STORAGE_KEY, JSON.stringify({ mode: "own", ownResult }));
+        setLoginRedirect("/create?publish=1");
+        setLoginModalOpen(true);
+      } else {
+        const data = await res.json();
+        setOwnError(data.error || "Publish failed");
+      }
+      setOwnPublishingId(null);
+      return;
+    }
+    setOwnPublishedIds((prev) => new Set(Array.from(prev).concat([block.id])));
+    setOwnPublishingId(null);
+  }
+
   function handlePublishOwn() {
     if (!user) {
       sessionStorage.setItem(UNPUBLISHED_STORAGE_KEY, JSON.stringify({ mode: "own", ownResult }));
@@ -526,6 +553,16 @@ function CreatePageContent() {
       return;
     }
     void doPublishOwn();
+  }
+
+  function handlePublishOwnBlock(block: TheoryBlock) {
+    if (!user) {
+      sessionStorage.setItem(UNPUBLISHED_STORAGE_KEY, JSON.stringify({ mode: "own", ownResult }));
+      setLoginRedirect("/create?publish=1");
+      setLoginModalOpen(true);
+      return;
+    }
+    void doPublishOwnBlock(block);
   }
 
   const unpublishedSelected = aiResult
@@ -641,24 +678,14 @@ function CreatePageContent() {
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="theory-body">Your theory</Label>
-                <p className="text-xs text-muted-foreground">Explain what you believe is happening biologically. The more specific the better.</p>
+                <p className="text-xs text-muted-foreground">Explain what you believe is happening biologically. Include any protocols, supplements, or lifestyle changes you have in mind — AI will extract and organize them automatically.</p>
                 <Textarea
                   id="theory-body"
                   value={ownTheory}
                   onChange={(e) => setOwnTheory(e.target.value)}
-                  placeholder="e.g. I believe that keeping PTH levels low by supplementing calcium, magnesium, and boron tells the body it has sufficient vitamin D, reducing the enzymatic breakdown of melanin..."
-                  rows={5}
+                  placeholder="e.g. I believe that keeping PTH levels low by supplementing 1000mg calcium, 400mg magnesium glycinate, and 3mg boron daily tells the body it has sufficient vitamin D, reducing the enzymatic breakdown of melanin. Morning sunlight exposure for 15-20 minutes without sunscreen may also help by naturally boosting vitamin D synthesis..."
+                  rows={7}
                   required
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="protocol">Proposed protocol <span className="text-muted-foreground font-normal">(optional)</span></Label>
-                <Textarea
-                  id="protocol"
-                  value={ownProtocol}
-                  onChange={(e) => setOwnProtocol(e.target.value)}
-                  placeholder="e.g. 1000mg calcium, 400mg magnesium glycinate, 3mg boron daily…"
-                  rows={3}
                 />
               </div>
               <div className="space-y-1.5">
@@ -699,17 +726,57 @@ function CreatePageContent() {
                 </div>
               )}
 
-              <EvaluatedBlock
-                block={ownResult.block}
-                articles={ownResult.articles}
-                onPublish={handlePublishOwn}
-                isPublished={ownPublished}
-                isPublishing={ownPublishing}
-              />
+              <p className="text-xs text-muted-foreground">
+                AI segmented your theory by evidence strength. Publish each block individually.
+              </p>
+
+              {/* Multi-block: show blocks grouped by tier */}
+              {ownResult.blocks && ownResult.blocks.length > 1 ? (
+                <div className="space-y-8">
+                  {TIERS.map((tier) => {
+                    const tierBlocks = (ownResult.blocks ?? []).filter((b) => b.evidenceTier === tier);
+                    if (tierBlocks.length === 0) return null;
+                    const tierDot = TIER_CONFIG[tier].dot;
+                    return (
+                      <div key={tier}>
+                        <div className="flex items-center gap-2 mb-3">
+                          <span className={cn("w-2.5 h-2.5 rounded-full shrink-0", tierDot)} />
+                          <h3 className="text-sm font-semibold text-foreground">{tier}</h3>
+                          <span className="text-xs text-muted-foreground font-mono">
+                            {tierBlocks.length} {tierBlocks.length === 1 ? "block" : "blocks"}
+                          </span>
+                        </div>
+                        <Separator className="mb-4" />
+                        <div className="space-y-4">
+                          {tierBlocks.map((block) => (
+                            <EvaluatedBlock
+                              key={block.id}
+                              block={block}
+                              articles={ownResult.articles}
+                              onPublish={() => handlePublishOwnBlock(block)}
+                              isPublished={ownPublishedIds.has(block.id)}
+                              isPublishing={ownPublishingId === block.id}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                /* Fallback: single block (legacy) */
+                <EvaluatedBlock
+                  block={ownResult.block}
+                  articles={ownResult.articles}
+                  onPublish={handlePublishOwn}
+                  isPublished={ownPublished}
+                  isPublishing={ownPublishing}
+                />
+              )}
 
               {ownError && <p className="text-sm text-destructive">{ownError}</p>}
 
-              <button type="button" onClick={() => { setOwnResult(null); setOwnPublished(false); }}
+              <button type="button" onClick={() => { setOwnResult(null); setOwnPublished(false); setOwnPublishedIds(new Set()); }}
                 className="text-xs text-muted-foreground hover:text-foreground transition-colors">
                 ← Revise my theory
               </button>

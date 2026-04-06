@@ -51,4 +51,8 @@ export const EvaluateResultSchema = z.object({
   block: TheoryBlockSchema,
 });
 
+export const EvaluateMultiResultSchema = z.object({
+  blocks: z.array(TheoryBlockSchema),
+});
+
 export type TheoryBlockSchemaType = z.infer<typeof TheoryBlockSchema>;

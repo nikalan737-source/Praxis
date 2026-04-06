@@ -6,6 +6,7 @@ export interface Habit {
   theoryId?: string;
   theoryTitle?: string;
   goalCategory?: string;
+  evidenceTier?: "Strong" | "Emerging" | "Theoretical" | "Unsupported";
   actionText: string;
   frequency: "daily" | "weekly" | "custom";
   scheduledDays: string[]; // e.g. ["Mon","Wed","Fri"]
@@ -42,6 +43,23 @@ export function todayISO(): string {
 export function dayAbbr(iso: string): DayAbbr {
   const d = new Date(iso + "T12:00:00"); // noon to avoid DST edge
   return ALL_DAYS[d.getDay() === 0 ? 6 : d.getDay() - 1];
+}
+
+/** Return ISO dates for every day in the month containing `iso` */
+export function monthDates(iso: string): string[] {
+  const d = new Date(iso + "T12:00:00");
+  const year = d.getFullYear();
+  const month = d.getMonth();
+  const first = new Date(year, month, 1);
+  const last = new Date(year, month + 1, 0);
+  const dates: string[] = [];
+  for (let i = first.getDate(); i <= last.getDate(); i++) {
+    const day = new Date(year, month, i);
+    dates.push(
+      `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, "0")}-${String(day.getDate()).padStart(2, "0")}`
+    );
+  }
+  return dates;
 }
 
 /** Return ISO dates for Mon–Sun of the week containing `iso` */
