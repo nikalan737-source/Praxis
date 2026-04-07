@@ -5,12 +5,14 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { LoginModal } from "@/components/LoginModal";
+import { OnboardingModal } from "@/components/OnboardingModal";
 
 function HomeContent() {
   const searchParams = useSearchParams();
   const redirect = searchParams.get("redirect");
   const { user, isLoading } = useAuth();
   const [loginOpen, setLoginOpen] = useState(false);
+  const [onboardingOpen, setOnboardingOpen] = useState(false);
 
   useEffect(() => {
     if (!isLoading && user && redirect) {
@@ -62,10 +64,25 @@ function HomeContent() {
         )}
       </div>
 
+      {/* How it works link */}
+      <button
+        type="button"
+        onClick={() => setOnboardingOpen(true)}
+        className="mt-6 text-sm text-muted-foreground hover:text-foreground transition-colors underline underline-offset-4"
+      >
+        How does Praxis work?
+      </button>
+
       <LoginModal
         isOpen={loginOpen}
         onClose={() => setLoginOpen(false)}
         redirectAfterLogin={redirect ?? undefined}
+      />
+
+      {/* Auto-shows on first visit; forceOpen lets the button re-trigger it */}
+      <OnboardingModal
+        forceOpen={onboardingOpen}
+        onClose={() => setOnboardingOpen(false)}
       />
     </div>
   );
