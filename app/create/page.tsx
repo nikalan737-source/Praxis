@@ -177,15 +177,21 @@ function GeneratedBlock({
 
 function EvaluatedBlock({
   block, articles, onPublish, isPublished, isPublishing,
+  isSelected, onToggleSelect,
 }: {
   block: TheoryBlock; articles: PubMedArticle[];
   onPublish: () => void; isPublished: boolean; isPublishing: boolean;
+  isSelected?: boolean; onToggleSelect?: (b: TheoryBlock) => void;
 }) {
   const cfg = TIER_CONFIG[block.evidenceTier];
   const [showInterventions, setShowInterventions] = useState(false);
 
   return (
-    <Card className="overflow-hidden">
+    <Card className={cn(
+      "overflow-hidden transition-all",
+      isPublished && "border-emerald-500/40",
+      isSelected && !isPublished && "border-primary/50 ring-1 ring-primary/20",
+    )}>
       <CardHeader className="p-5 pb-3 flex-row items-center justify-between gap-2 space-y-0 flex-wrap">
         <div className="flex items-center gap-2 flex-wrap">
           <span className={cn("w-2 h-2 rounded-full shrink-0", cfg.dot)} />
@@ -196,6 +202,15 @@ function EvaluatedBlock({
           <Link href="/community">
             <Badge variant="outline" className="border-emerald-500/40 text-emerald-400">Published ✓</Badge>
           </Link>
+        ) : onToggleSelect ? (
+          <Button
+            variant={isSelected ? "default" : "outline"}
+            size="sm"
+            className="h-7 text-xs"
+            onClick={() => onToggleSelect(block)}
+          >
+            {isSelected ? "✓ Added" : "+ Add"}
+          </Button>
         ) : (
           <Button size="sm" onClick={onPublish} disabled={isPublishing}>
             {isPublishing ? "Publishing…" : "Publish"}
@@ -327,6 +342,8 @@ function CreatePageContent() {
   const [ownPublishedIds, setOwnPublishedIds] = useState<Set<string>>(new Set());
   const [ownPublishingId, setOwnPublishingId] = useState<string | null>(null);
   const [pendingOwnPublish, setPendingOwnPublish] = useState(false);
+  const [ownSelectedIds, setOwnSelectedIds] = useState<Set<string>>(new Set());
+  const [ownPublishingAll, setOwnPublishingAll] = useState(false);
 
   const TIERS: TheoryBlock["evidenceTier"][] = ["Strong", "Emerging", "Theoretical", "Unsupported"];
   const TIER_ORDER = ["Strong", "Emerging", "Theoretical", "Unsupported"] as const;
@@ -478,6 +495,8 @@ function CreatePageContent() {
     setOwnError(null);
     setOwnResult(null);
     setOwnPublished(false);
+    setOwnSelectedIds(new Set());
+    setOwnPublishedIds(new Set());
     try {
       const res = await fetch("/api/evaluate-theory", {
         method: "POST",
@@ -565,8 +584,71 @@ function CreatePageContent() {
     void doPublishOwnBlock(block);
   }
 
+  function toggleSelectOwn(block: TheoryBlock) {
+    setOwnSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(block.id)) { next.delete(block.id); } else { next.add(block.id); }
+      return next;
+    });
+  }
+
+  function selectAllOwn() {
+    if (!ownResult?.blocks) return;
+    const unpublished = ownResult.blocks.filter((b) => !ownPublishedIds.has(b.id));
+    setOwnSelectedIds(new Set(unpublished.map((b) => b.id)));
+  }
+
+  async function doPublishOwnSelected() {
+    if (!ownResult?.blocks) return;
+    const toPublish = ownResult.blocks.filter(
+      (b) => ownSelectedIds.has(b.id) && !ownPublishedIds.has(b.id)
+    );
+    if (toPublish.length === 0) return;
+    setOwnPublishingAll(true);
+    setOwnError(null);
+    // Combine all selected blocks into a single published entry
+    const combined = combineSelectedBlocks(toPublish);
+    combined.createdType = "user_created";
+    combined.userTheoryText = ownResult.block.userTheoryText;
+    const res = await fetch("/api/publish", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(combined),
+    });
+    if (!res.ok) {
+      if (res.status === 401) {
+        sessionStorage.setItem(UNPUBLISHED_STORAGE_KEY, JSON.stringify({ mode: "own", ownResult }));
+        setLoginRedirect("/create?publish=1");
+        setLoginModalOpen(true);
+        setOwnPublishingAll(false);
+        return;
+      }
+      const data = await res.json();
+      setOwnError(data.error || "Publish failed");
+      setOwnPublishingAll(false);
+      return;
+    }
+    setOwnPublishedIds((prev) => new Set(Array.from(prev).concat(toPublish.map((b) => b.id))));
+    setOwnSelectedIds(new Set());
+    setOwnPublishingAll(false);
+  }
+
+  function handlePublishOwnSelected() {
+    if (!user) {
+      sessionStorage.setItem(UNPUBLISHED_STORAGE_KEY, JSON.stringify({ mode: "own", ownResult }));
+      setLoginRedirect("/create?publish=1");
+      setLoginModalOpen(true);
+      return;
+    }
+    void doPublishOwnSelected();
+  }
+
   const unpublishedSelected = aiResult
     ? aiResult.blocks.filter((b) => selectedIds.has(b.id) && !publishedIds.has(b.id))
+    : [];
+
+  const ownUnpublishedSelected = ownResult?.blocks
+    ? ownResult.blocks.filter((b) => ownSelectedIds.has(b.id) && !ownPublishedIds.has(b.id))
     : [];
 
   return (
@@ -727,8 +809,19 @@ function CreatePageContent() {
               )}
 
               <p className="text-xs text-muted-foreground">
-                AI segmented your theory by evidence strength. Publish each block individually.
+                AI segmented your theory by evidence strength. Click <span className="text-foreground font-medium">+ Add</span> on the blocks you want, then publish them all at once.
               </p>
+
+              {/* Select all button */}
+              {ownResult.blocks && ownResult.blocks.length > 1 && (
+                <button
+                  type="button"
+                  onClick={selectAllOwn}
+                  className="text-xs text-primary font-medium hover:opacity-80 transition-opacity"
+                >
+                  + Select all blocks
+                </button>
+              )}
 
               {/* Multi-block: show blocks grouped by tier */}
               {ownResult.blocks && ownResult.blocks.length > 1 ? (
@@ -756,6 +849,8 @@ function CreatePageContent() {
                               onPublish={() => handlePublishOwnBlock(block)}
                               isPublished={ownPublishedIds.has(block.id)}
                               isPublishing={ownPublishingId === block.id}
+                              isSelected={ownSelectedIds.has(block.id)}
+                              onToggleSelect={toggleSelectOwn}
                             />
                           ))}
                         </div>
@@ -785,7 +880,7 @@ function CreatePageContent() {
         </TabsContent>
       </Tabs>
 
-      {/* Sticky publish bar */}
+      {/* Sticky publish bar — AI blocks */}
       {unpublishedSelected.length > 0 && (
         <div className="fixed bottom-0 left-0 right-0 z-20 flex justify-center pb-6 pointer-events-none">
           <div className="pointer-events-auto flex items-center gap-3 bg-card border border-border rounded-2xl px-5 py-3 shadow-2xl">
@@ -802,6 +897,28 @@ function CreatePageContent() {
             </span>
             <Button size="sm" onClick={handlePublishAiSelected} disabled={publishingAll}>
               {publishingAll ? "Publishing…" : "Publish →"}
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Sticky publish bar — User theory blocks */}
+      {ownUnpublishedSelected.length > 0 && (
+        <div className="fixed bottom-0 left-0 right-0 z-20 flex justify-center pb-6 pointer-events-none">
+          <div className="pointer-events-auto flex items-center gap-3 bg-card border border-border rounded-2xl px-5 py-3 shadow-2xl">
+            <div className="flex -space-x-1">
+              {ownUnpublishedSelected.map((b) => (
+                <span key={b.id}
+                  className={cn("w-2.5 h-2.5 rounded-full border-2 border-card", TIER_CONFIG[b.evidenceTier].dot)}
+                />
+              ))}
+            </div>
+            <span className="text-sm text-muted-foreground">
+              <span className="font-semibold text-foreground">{ownUnpublishedSelected.length}</span>{" "}
+              {ownUnpublishedSelected.length === 1 ? "block" : "blocks"} selected
+            </span>
+            <Button size="sm" onClick={handlePublishOwnSelected} disabled={ownPublishingAll}>
+              {ownPublishingAll ? "Publishing…" : "Publish →"}
             </Button>
           </div>
         </div>

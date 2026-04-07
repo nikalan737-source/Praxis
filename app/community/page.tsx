@@ -537,12 +537,22 @@ function TheoryCard({
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
+type SortMode = "popular" | "recent" | "most_experiments" | "highest_rated";
+
+const SORT_OPTIONS: { value: SortMode; label: string }[] = [
+  { value: "popular", label: "Popular" },
+  { value: "recent", label: "Recent" },
+  { value: "most_experiments", label: "Most experiments" },
+  { value: "highest_rated", label: "Highest rated" },
+];
+
 export default function CommunityPage() {
   const [blocks, setBlocks] = useState<TheoryBlock[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [tier, setTier] = useState<TheoryBlock["evidenceTier"] | "">("");
   const [goalCategory, setGoalCategory] = useState("");
+  const [sortMode, setSortMode] = useState<SortMode>("popular");
   const [loginModalOpen, setLoginModalOpen] = useState(false);
   const [experimentTheory, setExperimentTheory] = useState<TheoryBlock | null>(null);
   const { user } = useAuth();
@@ -574,6 +584,7 @@ export default function CommunityPage() {
           actionSteps: row.actionSteps,
           interventions: row.interventions ?? [],
           tags: row.tags ?? [],
+          createdAt: row.createdAt,
           traction: { saves: 0, experimentLogs: 0, avgOutcome: 0 },
         })));
       })
@@ -598,29 +609,63 @@ export default function CommunityPage() {
 
   const theoryIds = useMemo(() => filtered.map((b) => b.id), [filtered]);
   const { counts } = useTheoryCounts(theoryIds);
-  const { userUpvoted, toggleUpvote, loading: upvoteLoading } = useUpvotes(theoryIds);
+  const { counts: upvoteCounts, userUpvoted, toggleUpvote, loading: upvoteLoading } = useUpvotes(theoryIds);
 
   const sorted = useMemo(() => {
     return [...filtered].sort((a, b) => {
-      const scoreA = (counts[a.id]?.logCount ?? 0) * 3 + (counts[a.id]?.upvoteCount ?? 0) * 2 + (counts[a.id]?.saveCount ?? 0);
-      const scoreB = (counts[b.id]?.logCount ?? 0) * 3 + (counts[b.id]?.upvoteCount ?? 0) * 2 + (counts[b.id]?.saveCount ?? 0);
-      return scoreB - scoreA;
+      switch (sortMode) {
+        case "recent":
+          return (b.createdAt ?? "").localeCompare(a.createdAt ?? "");
+        case "most_experiments":
+          return (counts[b.id]?.logCount ?? 0) - (counts[a.id]?.logCount ?? 0);
+        case "highest_rated":
+          return (counts[b.id]?.avgOutcome ?? 0) - (counts[a.id]?.avgOutcome ?? 0);
+        case "popular":
+        default: {
+          const scoreA = (counts[a.id]?.logCount ?? 0) * 3 + (counts[a.id]?.upvoteCount ?? 0) * 2 + (counts[a.id]?.saveCount ?? 0);
+          const scoreB = (counts[b.id]?.logCount ?? 0) * 3 + (counts[b.id]?.upvoteCount ?? 0) * 2 + (counts[b.id]?.saveCount ?? 0);
+          return scoreB - scoreA;
+        }
+      }
     });
-  }, [filtered, counts]);
+  }, [filtered, counts, sortMode]);
 
   return (
     <div>
       <h1 className="text-xl font-semibold text-foreground mb-6">Community</h1>
 
-      {/* Filters */}
-      <div className="flex flex-col sm:flex-row gap-2 mb-6">
+      {/* Search */}
+      <div className="mb-3">
         <Input
           type="search"
           placeholder="Search theories…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="flex-1 min-w-0 font-mono placeholder:font-mono"
+          className="w-full font-mono placeholder:font-mono"
         />
+      </div>
+
+      {/* Sort pills */}
+      <div className="flex gap-1.5 mb-3 overflow-x-auto pb-1">
+        {SORT_OPTIONS.map((opt) => (
+          <button
+            key={opt.value}
+            type="button"
+            onClick={() => setSortMode(opt.value)}
+            className={cn(
+              "px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors border",
+              sortMode === opt.value
+                ? "bg-primary text-primary-foreground border-primary"
+                : "bg-secondary/50 text-muted-foreground border-border hover:bg-secondary hover:text-foreground"
+            )}
+          >
+            {opt.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Tier + category filters */}
+      <div className="flex gap-2 mb-6">
         <Select
           value={tier}
           onChange={(e) => setTier(e.target.value as TheoryBlock["evidenceTier"] | "")}
@@ -652,7 +697,7 @@ export default function CommunityPage() {
               isSaved={isSaved(block.id)}
               onToggleSave={toggleSave}
               saveCount={counts[block.id]?.saveCount ?? 0}
-              upvoteCount={counts[block.id]?.upvoteCount ?? 0}
+              upvoteCount={upvoteCounts[block.id] ?? counts[block.id]?.upvoteCount ?? 0}
               isUpvoted={userUpvoted.has(block.id)}
               onToggleUpvote={toggleUpvote}
               upvoteLoading={upvoteLoading[block.id] ?? false}

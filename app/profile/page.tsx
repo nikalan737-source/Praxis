@@ -1779,7 +1779,7 @@ function PublishedTab({
 
   const theoryIds = useMemo(() => theories.map((t) => t.id), [theories]);
   const { counts } = useTheoryCounts(theoryIds);
-  const { userUpvoted, toggleUpvote, loading: upvoteLoading } = useUpvotes(theoryIds);
+  const { counts: upvoteCounts, userUpvoted, toggleUpvote, loading: upvoteLoading } = useUpvotes(theoryIds);
 
   if (loading) {
     return (
@@ -1811,7 +1811,7 @@ function PublishedTab({
             isSaved={isSaved(block.id)}
             onToggleSave={toggleSave}
             saveCount={counts[block.id]?.saveCount ?? 0}
-            upvoteCount={counts[block.id]?.upvoteCount ?? 0}
+            upvoteCount={upvoteCounts[block.id] ?? counts[block.id]?.upvoteCount ?? 0}
             isUpvoted={userUpvoted.has(block.id)}
             onToggleUpvote={toggleUpvote}
             upvoteLoading={upvoteLoading[block.id] ?? false}

@@ -25,6 +25,12 @@ const STEPS = [
     hint: "Tip: You can also browse AI-generated theories from the community.",
   },
   {
+    emoji: "💾",
+    title: "Save to Your Profile",
+    body: "Found a theory you like? Hit the save button to add it to your profile. Saving is how you build your personal library — and it's the first step to turning a theory into habits you actually track. You can save theories from the community or ones you create yourself.",
+    hint: "Tip: You need to save a theory before you can add its habits to your daily tracker.",
+  },
+  {
     emoji: "📋",
     title: "Run an Experiment",
     body: "Pick a theory block and turn it into an active experiment. You'll get a set of habits and interventions to follow. Your experiment has a start date and tracks your adherence over time.",

@@ -41,7 +41,7 @@ export async function POST(
       throw error;
     }
 
-    return NextResponse.json({ id: data.id, completedDate: data.completed_date });
+    return NextResponse.json({ id: data.id, habitId: data.habit_id, completedDate: data.completed_date });
   } catch (e) {
     console.error(e);
     return NextResponse.json({ error: "Failed to mark complete" }, { status: 500 });

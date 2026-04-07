@@ -103,7 +103,7 @@ function buildEvalPrompt(
       articles.map((a) => `[PMID ${a.pmid}] "${a.title}" — ${a.authors} (${a.year}, ${a.source})`).join("\n")
     : "\n\nNo directly matching PubMed articles found. Evaluate using general scientific knowledge.";
 
-  return `You are a scientific peer reviewer evaluating a user-submitted health theory. Your job is to analyze the theory thoroughly and SEGMENT IT into separate theory blocks based on how well-supported each component is by evidence.
+  return `You are a scientific peer reviewer evaluating a user-submitted health theory. Your job is to analyze the ENTIRE theory thoroughly and SEGMENT IT into MANY separate theory blocks based on how well-supported each component is by evidence. You must cover EVERY part of the user's theory — do not skip or summarize away any section.
 
 USER'S THEORY:
 - Title: "${title}"
@@ -117,13 +117,15 @@ IMPORTANT INSTRUCTIONS:
 
 1. EXTRACT PROTOCOLS AUTOMATICALLY: The user's theory text likely contains specific supplements, dosages, lifestyle changes, timing, and protocols embedded within it. You MUST extract ALL of these and turn them into structured interventions. Do NOT ask for a separate protocol — pull everything actionable from the theory text itself. If the theory mentions "400mg magnesium glycinate before bed," that becomes an intervention.
 
-2. SEGMENT BY EVIDENCE: Break the theory into MULTIPLE blocks — one per evidence tier that applies. A user's theory often contains parts that are well-supported AND parts that are speculative. Separate these into distinct blocks.
+2. SEGMENT BY EVIDENCE: Break the theory into MANY blocks. Each block should focus on a specific aspect, claim, or protocol cluster from the theory. A user's theory often contains parts that are well-supported AND parts that are speculative. Separate these into distinct blocks.
 
 For example, if a theory says "take magnesium and drink moonwater for sleep" — the magnesium part might be "Strong" evidence tier, while moonwater would be "Unsupported". These should become TWO separate blocks.
 
-3. Generate 2-4 blocks. You MUST have at least 2 blocks with different evidence tiers. Each block should focus on a different aspect of the theory.
+3. Generate 6-10 blocks. Cover the ENTIRE theory — every claim, every supplement, every protocol mentioned. It is PERFECTLY FINE to have multiple blocks with the SAME evidence tier. If the theory is mostly unsupported, you might have 6 Unsupported blocks and 1 Emerging block — that's correct. Do NOT force variety in tiers if the evidence doesn't support it. Each block should focus on a different specific aspect/topic within the theory.
 
 4. Each block should have MANY interventions/protocols (5-10 per block when applicable). Be thorough — users want comprehensive, actionable protocols. Include supplement dosages, timing, dietary changes, lifestyle modifications, etc. ALSO suggest additional protocols that the user didn't mention but that are supported by the research for their goal.
+
+5. DO NOT COMPRESS OR SKIP CONTENT. If the user wrote a long, detailed theory, your output should be proportionally detailed. Every specific claim or mechanism they mention should appear in at least one block.
 
 Return a JSON object (no markdown, no code fences):
 {
@@ -172,13 +174,15 @@ Evidence tier assignment:
 - Unsupported: contradicts established evidence or is purely speculative
 
 Rules:
-- Generate 2-4 blocks with DIFFERENT evidence tiers
+- Generate 6-10 blocks. Multiple blocks CAN share the same evidence tier — that is expected and correct
 - Each block should have 5-10 interventions when the theory is comprehensive
 - Each block should have 5-8 action steps
 - Be honest — if parts are speculative, put them in their own Theoretical/Unsupported block
 - aiOverview must cite specific PMIDs when relevant
 - interventions should be thorough and comprehensive — include everything relevant
-- Each intervention's tier should match its parent block's evidenceTier`;
+- Each intervention's tier should match its parent block's evidenceTier
+- Cover EVERY part of the user's theory — do NOT skip sections or compress multiple topics into one block
+- If the theory is very long, generate closer to 10 blocks to ensure full coverage`;
 }
 
 async function callOpenAI(

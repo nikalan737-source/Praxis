@@ -36,6 +36,7 @@ export type TheoryBlock = {
     contraindications: string[];
   }[];
   tags: string[];
+  createdAt?: string;
   traction: { saves: number; experimentLogs: number; avgOutcome: number };
 };
 

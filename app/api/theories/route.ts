@@ -33,6 +33,7 @@ export async function GET() {
       actionSteps: row.action_steps ?? undefined,
       interventions: row.interventions ?? [],
       tags: row.tags ?? [],
+      createdAt: row.created_at ?? undefined,
     }));
 
     return NextResponse.json(blocks);
