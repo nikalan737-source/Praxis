@@ -114,13 +114,16 @@ function buildSystemPrompt(articles: PubMedArticle[], goal: string): string {
 USER GOAL: "${goal}"
 ${articleContext}
 
-Generate TWELVE theory blocks — THREE per evidence tier — as a JSON object. Each block should:
+Generate 10-15 theory blocks as a JSON object. The number of blocks per evidence tier should be determined entirely by what the evidence actually supports for this specific goal — do NOT try to balance tiers equally. If the goal has 8 strong-evidence mechanisms, generate 8 Strong blocks. If something is almost entirely speculative, you might only have 1-2 Unsupported blocks. Let the science dictate the distribution.
+
+Each block should:
 1. Take a DIFFERENT mechanistic angle on the same goal (different biological pathway, cofactor, or upstream cause)
-2. Within the same tier, each of the 3 theories MUST cover a genuinely distinct mechanism, intervention, or angle — no variations of the same approach
+2. Each block MUST cover a genuinely distinct mechanism, intervention, or angle — no variations of the same approach
 3. Draw its OWN conclusions by connecting dots across studies — find what's surprising, counterintuitive, or overlooked
 4. Explain feedback loops, upstream causes, and second-order effects where relevant
 5. Give a keyInsight that sounds like something a smart researcher would say at a conference — specific, non-obvious, actionable
 6. NOT simply restate what a paper says — synthesize and reason beyond individual papers
+7. Include as many interventions per block as genuinely apply — do NOT artificially limit to 1 or 2. If a block has 8 relevant protocols, include all 8.
 
 Example of BAD keyInsight: "Studies show that X intervention improves Y outcome."
 Example of GOOD keyInsight: "The body actively breaks down melanin in winter to absorb more vitamin D — meaning a tan is actually a signal of sufficient vitamin D status, and you can slow tan loss by keeping PTH low through calcium, magnesium, and boron."
@@ -129,39 +132,36 @@ Output ONLY this JSON (no markdown, no code fences):
 {
   "blocks": [
     {
-      "id": "generated-strong-1-<6char>",
+      "id": "generated-<tier>-1-<6char>",
       "title": "concise title max 60 chars",
       "goalCategory": "Cognitive|Metabolic|Mood|Physical|Recovery|Sleep",
       "goalStatement": "one sentence restatement of the goal",
-      "evidenceTier": "Strong",
+      "evidenceTier": "Strong|Emerging|Theoretical|Unsupported",
       "riskLevel": "Low|Moderate|High",
       "reversibility": "High|Medium|Low",
       "mechanismSummary": "2-3 sentences explaining the biological mechanism — focus on the pathway, feedback loop, or upstream cause that makes this work",
       "keyInsight": "ONE specific, surprising, mechanistic takeaway — the kind of insight that makes someone say 'I never thought of it that way'. Must reference a concrete biological process, compound, or feedback loop.",
       "actionSteps": [
-        "3-5 immediately actionable things someone can do TODAY. Each must be specific: include quantities, timing, exact activities, and WHY it works mechanistically. Format: 'Concrete action — mechanistic reason'. Examples: 'Sprint at 100% effort for 30 seconds immediately after waking — triggers a growth hormone pulse lasting 20-30 minutes via pituitary response to lactate', 'Take 400mg magnesium glycinate before bed — lowers PTH overnight, reducing enzymatic melanin breakdown', 'Eat 100g of calf liver weekly — provides retinol and copper, both rate-limiting cofactors for melanin synthesis'"
+        "3-5 immediately actionable things someone can do TODAY. Each must be specific: include quantities, timing, exact activities, and WHY it works mechanistically. Format: 'Concrete action — mechanistic reason'."
       ],
       "references": ["<pmid>"],
-      "interventions": [{
-        "tier": "Strong",
-        "name": "string",
-        "mechanism": "string",
-        "steps": ["string"],
-        "durationDays": 14,
-        "trackingMetrics": ["string"],
-        "expectedMagnitude": "Small|Medium|Large",
-        "riskLevel": "Low|Moderate|High",
-        "reversibility": "High|Medium|Low",
-        "contraindications": ["string"]
-      }],
+      "interventions": [
+        {
+          "tier": "<same as block evidenceTier>",
+          "name": "string",
+          "mechanism": "string",
+          "steps": ["string"],
+          "durationDays": 14,
+          "trackingMetrics": ["string"],
+          "expectedMagnitude": "Small|Medium|Large",
+          "riskLevel": "Low|Moderate|High",
+          "reversibility": "High|Medium|Low",
+          "contraindications": ["string"]
+        }
+      ],
       "tags": ["string"],
       "traction": { "saves": 0, "experimentLogs": 0, "avgOutcome": 0 }
-    },
-    { ...same structure, "evidenceTier": "Strong", "id": "generated-strong-2-<6char>" — DIFFERENT mechanism },
-    { ...same structure, "evidenceTier": "Strong", "id": "generated-strong-3-<6char>" — DIFFERENT mechanism },
-    { ...3 blocks with "evidenceTier": "Emerging", each with DIFFERENT mechanisms },
-    { ...3 blocks with "evidenceTier": "Theoretical", each with DIFFERENT mechanisms },
-    { ...3 blocks with "evidenceTier": "Unsupported", each with DIFFERENT mechanisms, "references": [] }
+    }
   ]
 }
 
@@ -171,8 +171,9 @@ Rules:
 - Theoretical: mechanistically plausible, minimal direct evidence, be explicit about the reasoning chain
 - Unsupported: speculative/anecdotal, no references needed, clearly label the reasoning as speculative
 - Each block MUST address a different angle/pathway — not variations of the same mechanism
-- Within each tier, the 3 theories must explore genuinely different approaches (e.g. for Strong: one dietary, one exercise-based, one supplemental)
-- Generate exactly 12 blocks total: 3 Strong, 3 Emerging, 3 Theoretical, 3 Unsupported
+- The number of blocks per tier is determined by the evidence, NOT by a quota. A goal with lots of strong science should have many Strong blocks. Do not hold back Strong-tier content to fill other tiers.
+- Include ALL relevant interventions per block — if a block has 6 applicable protocols, include all 6. Do not cap at 1-2.
+- Total block count should be 10-15 depending on how rich the topic is
 - keyInsight MUST be specific and mechanistic — never generic
 - Only cite PMIDs that are genuinely mechanistically relevant to that block`;
 }
@@ -181,7 +182,7 @@ async function callOpenAI(goal: string, articles: PubMedArticle[], repairErrors?
   const client = openai();
   const userMessage = repairErrors
     ? `Fix this JSON to match the schema. Errors:\n${repairErrors}\nReturn ONLY valid JSON.`
-    : `Generate the 12-block theory analysis now (3 per evidence tier).`;
+    : `Generate the theory blocks now. Let the evidence dictate how many blocks per tier — do not force equal distribution.`;
 
   const res = await client.chat.completions.create({
     model: "gpt-4o-mini",

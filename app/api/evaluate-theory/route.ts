@@ -121,9 +121,9 @@ IMPORTANT INSTRUCTIONS:
 
 For example, if a theory says "take magnesium and drink moonwater for sleep" — the magnesium part might be "Strong" evidence tier, while moonwater would be "Unsupported". These should become TWO separate blocks.
 
-3. Generate 6-10 blocks. Cover the ENTIRE theory — every claim, every supplement, every protocol mentioned. It is PERFECTLY FINE to have multiple blocks with the SAME evidence tier. If the theory is mostly unsupported, you might have 6 Unsupported blocks and 1 Emerging block — that's correct. Do NOT force variety in tiers if the evidence doesn't support it. Each block should focus on a different specific aspect/topic within the theory.
+3. Generate as many blocks as the content genuinely requires — typically 6-12. The tier distribution should reflect the actual evidence, not an artificial spread. If the theory is mostly about well-researched topics, most blocks should be Strong or Emerging. If it's mostly speculative, most should be Theoretical or Unsupported. NEVER hold back content from one tier just to populate another. Each block should focus on a specific, distinct aspect or mechanism.
 
-4. Each block should have MANY interventions/protocols (5-10 per block when applicable). Be thorough — users want comprehensive, actionable protocols. Include supplement dosages, timing, dietary changes, lifestyle modifications, etc. ALSO suggest additional protocols that the user didn't mention but that are supported by the research for their goal.
+4. Each block should have as many interventions as genuinely apply — do NOT cap at an arbitrary number. If a block covers a compound movement like squats for anabolic hormone production, include all the relevant protocols: tempo, volume, rest, nutrition timing, sleep, etc. More is better than less. ALSO suggest additional protocols the user didn't mention that are supported by research for their goal.
 
 5. DO NOT COMPRESS OR SKIP CONTENT. If the user wrote a long, detailed theory, your output should be proportionally detailed. Every specific claim or mechanism they mention should appear in at least one block.
 
@@ -174,15 +174,14 @@ Evidence tier assignment:
 - Unsupported: contradicts established evidence or is purely speculative
 
 Rules:
-- Generate 6-10 blocks. Multiple blocks CAN share the same evidence tier — that is expected and correct
-- Each block should have 5-10 interventions when the theory is comprehensive
+- Generate as many blocks as the content requires (typically 6-12). Multiple blocks WILL share the same evidence tier — that is expected and correct
+- The tier distribution must reflect the actual science, not a quota. Do NOT hold Strong-tier interventions back just to balance tiers
+- Include ALL relevant interventions per block — no arbitrary cap. If a block has 8 applicable protocols, include all 8
 - Each block should have 5-8 action steps
 - Be honest — if parts are speculative, put them in their own Theoretical/Unsupported block
 - aiOverview must cite specific PMIDs when relevant
-- interventions should be thorough and comprehensive — include everything relevant
-- Each intervention's tier should match its parent block's evidenceTier
 - Cover EVERY part of the user's theory — do NOT skip sections or compress multiple topics into one block
-- If the theory is very long, generate closer to 10 blocks to ensure full coverage`;
+- Each intervention's tier should match its parent block's evidenceTier`;
 }
 
 async function callOpenAI(
