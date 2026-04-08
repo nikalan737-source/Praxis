@@ -7,6 +7,7 @@ export async function GET() {
     const { data, error } = await supabase
       .from("theory_blocks")
       .select("*")
+      .eq("is_public", true)
       .order("created_at", { ascending: false });
 
     if (error) {

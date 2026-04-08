@@ -34,6 +34,7 @@ export async function GET() {
       interventions: row.interventions ?? [],
       tags: row.tags ?? [],
       createdAt: row.created_at,
+      isPublic: row.is_public ?? true,
     }));
 
     return NextResponse.json(blocks);

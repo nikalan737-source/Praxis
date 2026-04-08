@@ -1501,7 +1501,7 @@ function PubLogsPanel({ theoryId, onLoginRequest }: { theoryId: string; onLoginR
   );
 }
 
-// ── Published theory card ───────────────────────────────────────────────────
+// ── Created theory card ──────────────────────────────────────────────────────
 
 function PublishedTheoryCard({
   block,
@@ -1517,8 +1517,9 @@ function PublishedTheoryCard({
   activeExperimentId,
   onStartExperiment,
   onLoginRequest,
+  onVisibilityChange,
 }: {
-  block: TheoryBlock & { createdAt?: string };
+  block: TheoryBlock & { createdAt?: string; isPublic?: boolean };
   isSaved: boolean;
   onToggleSave: (id: string) => Promise<{ requiresAuth?: boolean } | undefined | void>;
   saveCount: number;
@@ -1531,8 +1532,27 @@ function PublishedTheoryCard({
   activeExperimentId?: string;
   onStartExperiment: (block: TheoryBlock) => void;
   onLoginRequest: () => void;
+  onVisibilityChange?: (id: string, isPublic: boolean) => void;
 }) {
   const [expandedPanel, setExpandedPanel] = useState<"theory" | "logs" | null>(null);
+  const [isPublic, setIsPublic] = useState(block.isPublic ?? true);
+  const [togglingVisibility, setTogglingVisibility] = useState(false);
+
+  async function handleToggleVisibility() {
+    if (togglingVisibility) return;
+    setTogglingVisibility(true);
+    const next = !isPublic;
+    const res = await fetch(`/api/theories/${block.id}/visibility`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ isPublic: next }),
+    });
+    if (res.ok) {
+      setIsPublic(next);
+      onVisibilityChange?.(block.id, next);
+    }
+    setTogglingVisibility(false);
+  }
 
   function togglePanel(panel: "theory" | "logs") {
     setExpandedPanel((prev) => (prev === panel ? null : panel));
@@ -1566,6 +1586,14 @@ function PublishedTheoryCard({
             <Badge variant="secondary" className="text-[10px]">AI</Badge>
           )}
           <span className="text-xs text-muted-foreground font-mono">{block.goalCategory}</span>
+          <span className={cn(
+            "text-[10px] px-2 py-0.5 rounded-full border font-medium",
+            isPublic
+              ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-600"
+              : "bg-muted/50 border-border text-muted-foreground"
+          )}>
+            {isPublic ? "In community" : "Private"}
+          </span>
           {block.createdAt && (
             <span className="text-xs text-muted-foreground font-mono ml-auto">
               {new Date(block.createdAt).toLocaleDateString()}
@@ -1595,12 +1623,20 @@ function PublishedTheoryCard({
             <span className="font-medium text-foreground">{saveCount}</span> saved
           </span>
           <span className="text-xs text-muted-foreground font-mono">
-            <span className="font-medium text-foreground">{logCount}</span> {logCount === 1 ? "log" : "logs"}
+            <span className="font-medium text-foreground">{logCount}</span> {logCount === 1 ? "experiment" : "experiments"}
             {logCount > 0 && <span> · {avgOutcome}/10 avg</span>}
           </span>
           <span className="text-xs text-muted-foreground font-mono">Risk {block.riskLevel}</span>
 
           <div className="ml-auto flex items-center gap-2">
+            <Button
+              variant="ghost" size="sm"
+              className={cn("h-7 text-xs px-3", isPublic ? "text-muted-foreground" : "text-primary")}
+              onClick={handleToggleVisibility}
+              disabled={togglingVisibility}
+            >
+              {togglingVisibility ? "…" : isPublic ? "Remove from community" : "Publish to community"}
+            </Button>
             {activeExperimentId ? (
               <Link href={`/experiment/${activeExperimentId}`}>
                 <Button variant="default" size="sm" className="h-7 text-xs px-3">View Journal</Button>
@@ -1784,7 +1820,7 @@ function PublishedTab({
   if (loading) {
     return (
       <div className="py-8 text-center">
-        <p className="text-sm text-muted-foreground animate-pulse">Loading published theories…</p>
+        <p className="text-sm text-muted-foreground animate-pulse">Loading your theories…</p>
       </div>
     );
   }
@@ -1792,7 +1828,7 @@ function PublishedTab({
   if (theories.length === 0) {
     return (
       <div className="py-12 text-center space-y-2">
-        <p className="text-muted-foreground">You haven't published any theories yet.</p>
+        <p className="text-muted-foreground">You haven't created any theories yet.</p>
         <p className="text-xs text-muted-foreground leading-relaxed max-w-xs mx-auto">
           Head to the <Link href="/create" className="text-primary font-medium hover:opacity-80">Create</Link> page
           to generate or write your own theories.
@@ -1820,6 +1856,11 @@ function PublishedTab({
             activeExperimentId={activeExpByTheory.get(block.id)}
             onStartExperiment={onStartExperiment}
             onLoginRequest={() => setLoginModalOpen(true)}
+            onVisibilityChange={(id, isPublic) => {
+              setTheories((prev) =>
+                prev.map((t) => (t.id === id ? { ...t, isPublic } : t))
+              );
+            }}
           />
         ))}
       </div>
@@ -1920,7 +1961,7 @@ export default function ProfilePage() {
         <TabsList className="mb-2">
           <TabsTrigger value="habits">Habits</TabsTrigger>
           <TabsTrigger value="experiments">Experiments</TabsTrigger>
-          <TabsTrigger value="published">Published</TabsTrigger>
+          <TabsTrigger value="published">Created</TabsTrigger>
           <TabsTrigger value="library">Library</TabsTrigger>
         </TabsList>
 
