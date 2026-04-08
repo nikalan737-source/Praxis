@@ -417,7 +417,7 @@ function TheoryCard({
                 </svg>
                 <p className="text-xs font-semibold text-indigo-400">AI Analysis</p>
               </div>
-              <p className="text-sm text-indigo-200/90 leading-relaxed">{block.aiOverview}</p>
+              <p className="text-sm text-foreground/85 leading-relaxed">{block.aiOverview}</p>
             </div>
           )}
 

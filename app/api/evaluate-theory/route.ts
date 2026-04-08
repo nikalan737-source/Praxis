@@ -9,6 +9,40 @@ const openai = () => {
   return new OpenAI({ apiKey });
 };
 
+// ── Step 0: Validate topic is health-related ────────────────────────────────
+
+async function validateHealthTopic(title: string, goal: string, theory: string): Promise<{ valid: boolean; reason?: string }> {
+  try {
+    const client = openai();
+    const res = await client.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        {
+          role: "system",
+          content: `You are a topic classifier for a health experimentation app called Praxis. Your job is to determine if a submitted theory is genuinely related to human health, biology, physiology, fitness, nutrition, mental health, sleep, recovery, or related wellness topics.
+
+Return a JSON object: { "valid": true } if it is health-related, or { "valid": false, "reason": "brief explanation" } if it is NOT.
+
+Examples of VALID topics: sleep optimization, hormone levels, muscle growth, nutrition, mental focus, longevity, gut health, skin health, injury recovery, stress management.
+Examples of INVALID topics: how to build a motorcycle, stock trading strategies, cooking recipes, software development, politics, sports betting.
+
+Be generous — if it has any plausible health angle, mark it valid.`,
+        },
+        {
+          role: "user",
+          content: `Title: ${title}\nGoal: ${goal}\nTheory: ${theory.slice(0, 500)}`,
+        },
+      ],
+      response_format: { type: "json_object" },
+      temperature: 0,
+    });
+    const parsed = JSON.parse(res.choices[0]?.message?.content ?? "{}");
+    return { valid: parsed.valid !== false, reason: parsed.reason };
+  } catch {
+    return { valid: true }; // fail open — don't block if classifier errors
+  }
+}
+
 // ── Step 1: Extract search queries from user theory ──────────────────────────
 
 async function extractSearchQueries(title: string, theory: string, goal: string): Promise<string[]> {
@@ -181,7 +215,9 @@ Rules:
 - Be honest — if parts are speculative, put them in their own Theoretical/Unsupported block
 - aiOverview must cite specific PMIDs when relevant
 - Cover EVERY part of the user's theory — do NOT skip sections or compress multiple topics into one block
-- Each intervention's tier should match its parent block's evidenceTier`;
+- Each intervention's tier should match its parent block's evidenceTier
+- ANTI-REPETITION: Check that no two blocks share the same intervention name, mechanism, or action step. If you catch a duplicate, replace it with a different angle from the user's theory. Do not pad blocks with generic advice unless it is the specific focus of that block
+- Each block's keyInsight must be unique — never restate another block's insight in different words`;
 }
 
 async function callOpenAI(
@@ -226,6 +262,14 @@ export async function POST(request: NextRequest) {
     }
 
     const categoryNorm = category?.trim() || "Physical";
+
+    // Step 0: Validate health topic
+    const topicCheck = await validateHealthTopic(title.trim(), goal.trim(), theory.trim());
+    if (!topicCheck.valid) {
+      return NextResponse.json({
+        error: `Praxis is designed for health and wellness theories. Your submission doesn't seem health-related${topicCheck.reason ? ` (${topicCheck.reason})` : ""}. Try a theory about fitness, nutrition, sleep, hormones, recovery, or mental health.`,
+      }, { status: 400 });
+    }
 
     // Step 1: Extract search queries
     const queries = await extractSearchQueries(title.trim(), theory.trim(), goal.trim());

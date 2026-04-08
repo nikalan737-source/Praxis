@@ -175,7 +175,9 @@ Rules:
 - Include ALL relevant interventions per block — if a block has 6 applicable protocols, include all 6. Do not cap at 1-2.
 - Total block count should be 10-15 depending on how rich the topic is
 - keyInsight MUST be specific and mechanistic — never generic
-- Only cite PMIDs that are genuinely mechanistically relevant to that block`;
+- Only cite PMIDs that are genuinely mechanistically relevant to that block
+- ANTI-REPETITION: Before finalizing, check that no two blocks share the same intervention name, mechanism summary, or action step. If you catch a duplicate, replace it with a genuinely different angle. Do not pad blocks with generic advice like "get enough sleep" or "stay hydrated" unless sleep or hydration IS the specific mechanism being discussed
+- Each block's keyInsight must be unique — never restate another block's insight in different words`;
 }
 
 async function callOpenAI(goal: string, articles: PubMedArticle[], repairErrors?: string): Promise<string> {
@@ -212,6 +214,26 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Missing or invalid 'goal'" }, { status: 400 });
     }
     const goalNorm = goal.trim();
+
+    // Step 0: Validate health topic
+    try {
+      const client = openai();
+      const check = await client.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          { role: "system", content: `You are a topic classifier for a health app. Return {"valid":true} if the goal is health, fitness, nutrition, sleep, wellness, or biology related. Return {"valid":false,"reason":"brief reason"} if it is not (e.g. motorcycles, finance, cooking). Be generous with health angles.` },
+          { role: "user", content: `Goal: ${goalNorm.slice(0, 300)}` },
+        ],
+        response_format: { type: "json_object" },
+        temperature: 0,
+      });
+      const parsed = JSON.parse(check.choices[0]?.message?.content ?? "{}");
+      if (parsed.valid === false) {
+        return NextResponse.json({
+          error: `Praxis is built for health and wellness theories. Your goal doesn't seem health-related${parsed.reason ? ` (${parsed.reason})` : ""}. Try something like "improve sleep quality", "build muscle while staying injury-free", or "increase mental focus".`,
+        }, { status: 400 });
+      }
+    } catch { /* fail open */ }
 
     // Step 1: Extract smart biological search queries
     const queries = await extractSearchQueries(goalNorm);
