@@ -1518,6 +1518,7 @@ function PublishedTheoryCard({
   onStartExperiment,
   onLoginRequest,
   onVisibilityChange,
+  onDelete,
 }: {
   block: TheoryBlock & { createdAt?: string; isPublic?: boolean };
   isSaved: boolean;
@@ -1533,10 +1534,25 @@ function PublishedTheoryCard({
   onStartExperiment: (block: TheoryBlock) => void;
   onLoginRequest: () => void;
   onVisibilityChange?: (id: string, isPublic: boolean) => void;
+  onDelete?: (id: string) => void;
 }) {
   const [expandedPanel, setExpandedPanel] = useState<"theory" | "logs" | null>(null);
   const [isPublic, setIsPublic] = useState(block.isPublic ?? true);
   const [togglingVisibility, setTogglingVisibility] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  async function handleDelete() {
+    if (deleting) return;
+    setDeleting(true);
+    const res = await fetch(`/api/theories/${block.id}`, { method: "DELETE" });
+    if (res.ok) {
+      onDelete?.(block.id);
+    } else {
+      setDeleting(false);
+      setConfirmDelete(false);
+    }
+  }
 
   async function handleToggleVisibility() {
     if (togglingVisibility) return;
@@ -1629,6 +1645,36 @@ function PublishedTheoryCard({
           <span className="text-xs text-muted-foreground font-mono">Risk {block.riskLevel}</span>
 
           <div className="ml-auto flex items-center gap-2">
+            {confirmDelete ? (
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs text-muted-foreground">Delete this theory?</span>
+                <Button
+                  variant="destructive" size="sm"
+                  className="h-7 text-xs px-3"
+                  onClick={handleDelete}
+                  disabled={deleting}
+                >
+                  {deleting ? "Deleting…" : "Yes, delete"}
+                </Button>
+                <Button
+                  variant="ghost" size="sm"
+                  className="h-7 text-xs px-3"
+                  onClick={() => setConfirmDelete(false)}
+                  disabled={deleting}
+                >
+                  Cancel
+                </Button>
+              </div>
+            ) : (
+              <Button
+                variant="ghost" size="sm"
+                className="h-7 text-xs px-2 text-muted-foreground hover:text-destructive"
+                onClick={() => setConfirmDelete(true)}
+                title="Delete theory"
+              >
+                🗑
+              </Button>
+            )}
             <Button
               variant="ghost" size="sm"
               className={cn("h-7 text-xs px-3", isPublic ? "text-muted-foreground" : "text-primary")}
@@ -1860,6 +1906,9 @@ function PublishedTab({
               setTheories((prev) =>
                 prev.map((t) => (t.id === id ? { ...t, isPublic } : t))
               );
+            }}
+            onDelete={(id) => {
+              setTheories((prev) => prev.filter((t) => t.id !== id));
             }}
           />
         ))}
