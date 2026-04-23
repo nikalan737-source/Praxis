@@ -277,6 +277,8 @@ function GeneratePageContent() {
   const [error, setError] = useState<string | null>(null);
   const [loginModalOpen, setLoginModalOpen] = useState(false);
   const [loginRedirect, setLoginRedirect] = useState<string | undefined>();
+  const [limitReached, setLimitReached] = useState(false);
+  const [upgrading, setUpgrading] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [publishedIds, setPublishedIds] = useState<Set<string>>(new Set());
   const [publishingAll, setPublishingAll] = useState(false);
@@ -326,6 +328,7 @@ function GeneratePageContent() {
     if (!goal.trim()) return;
     setLoading(true);
     setError(null);
+    setLimitReached(false);
     setResult(null);
     setSelectedIds(new Set());
     setPublishedIds(new Set());
@@ -336,6 +339,10 @@ function GeneratePageContent() {
         body: JSON.stringify({ goal: goal.trim() }),
       });
       const data = await res.json();
+      if (res.status === 429 && data.error === "limit_reached") {
+        setLimitReached(true);
+        return;
+      }
       if (!res.ok) { setError(data.error || "Generation failed"); return; }
       setResult(data as GenerateResult);
     } catch {
@@ -343,6 +350,15 @@ function GeneratePageContent() {
     } finally {
       setLoading(false);
     }
+  }
+
+  async function handleUpgrade() {
+    setUpgrading(true);
+    try {
+      const res = await fetch("/api/stripe/checkout", { method: "POST" });
+      const data = await res.json();
+      if (data.url) window.location.href = data.url;
+    } catch { /* ignore */ } finally { setUpgrading(false); }
   }
 
   async function publishOne(block: TheoryBlock): Promise<boolean> {
@@ -433,6 +449,22 @@ function GeneratePageContent() {
       </form>
 
       {error && <p className="mt-4 text-sm text-red-400">{error}</p>}
+
+      {limitReached && (
+        <div className="mt-6 rounded-xl border border-amber-500/30 bg-amber-500/5 p-5 text-center space-y-3">
+          <p className="text-sm font-semibold text-amber-400">You've used all 10 free generations this month</p>
+          <p className="text-xs text-zinc-400">
+            Upgrade to Praxis Pro for unlimited theory generations, full community analytics, and more.
+          </p>
+          <button
+            onClick={handleUpgrade}
+            disabled={upgrading}
+            className="px-5 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-white text-sm font-semibold transition-colors disabled:opacity-50"
+          >
+            {upgrading ? "Loading…" : "Upgrade to Pro — $9/month"}
+          </button>
+        </div>
+      )}
 
       {result && (
         <div className="mt-10">

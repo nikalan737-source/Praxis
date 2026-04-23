@@ -75,6 +75,7 @@ export async function POST(request: NextRequest) {
         status: "in_progress",
         is_public: false,
         adherence_percent: 0,
+        duration_days: expectedDurationDays ?? 56,
         followed_interventions: followedInterventions ?? [],
         skipped_interventions: [],
         outcome_rating: null,
@@ -97,7 +98,7 @@ export async function POST(request: NextRequest) {
         tracking_categories: trackingCategories ?? [],
         checkin_frequency: checkinFrequency ?? "weekly",
         primary_metric: primaryMetric ?? "",
-        expected_duration_days: expectedDurationDays ?? 30,
+        expected_duration_days: expectedDurationDays ?? 56,
       })
       .select()
       .single();

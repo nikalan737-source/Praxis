@@ -11,7 +11,7 @@ export async function GET() {
     // Fetch in-progress experiment logs (required table)
     const { data: logs, error: logErr } = await supabase
       .from("experiment_logs")
-      .select("id, theory_id, started_at, status, created_at")
+      .select("id, theory_id, started_at, status, created_at, duration_days")
       .eq("user_id", user.id)
       .eq("status", "in_progress")
       .order("created_at", { ascending: false });
@@ -112,7 +112,12 @@ export async function GET() {
         theoryId: log.theory_id,
         theoryTitle: theoryMap.get(log.theory_id) ?? "Unknown theory",
         startedAt: log.started_at,
-        expectedDurationDays: s?.expected_duration_days ?? 30,
+        // Prefer duration from the log itself; fall back to legacy settings value,
+        // then to the app-wide default (matches mobile DEFAULT_DURATION_DAYS).
+        expectedDurationDays:
+          (log as { duration_days?: number | null }).duration_days ??
+          s?.expected_duration_days ??
+          56,
         primaryMetric: s?.primary_metric ?? "",
         lastCheckinDate: latestMap.get(log.id) ?? null,
         adherencePercent,

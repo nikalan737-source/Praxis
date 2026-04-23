@@ -9,7 +9,7 @@ const STEPS = [
   {
     emoji: "🧪",
     title: "Welcome to Praxis",
-    body: "Praxis is your personal health experimentation platform. Instead of guessing what works for your body, you turn your health ideas into structured experiments — track them, log progress, and find out what actually moves the needle.",
+    body: "Praxis is your personal health protocol platform. Instead of guessing what works for your body, you turn your health ideas into structured protocols — track them, log progress, and find out what actually moves the needle.",
     hint: null,
   },
   {
@@ -32,20 +32,20 @@ const STEPS = [
   },
   {
     emoji: "📋",
-    title: "Run an Experiment",
-    body: "Pick a theory block and turn it into an active experiment. You'll get a set of habits and interventions to follow. Your experiment has a start date and tracks your adherence over time.",
+    title: "Run a Protocol",
+    body: "Pick a theory block and turn it into an active protocol. You'll get a set of habits and interventions to follow. Your protocol has a start date and tracks your adherence over time.",
     hint: "Tip: Each habit shows an evidence strength marker so you know what's well-supported vs. exploratory.",
   },
   {
     emoji: "📅",
     title: "Log Updates & Track Habits",
-    body: "Check in on your experiment regularly — rate how it's going, mark habits as done, note any side effects, and add observations. Your Habits tab shows a weekly and monthly calendar with completion dots so you can see patterns at a glance.",
+    body: "Check in on your protocol regularly — rate how it's going, mark habits as done, note any side effects, and add observations. Your Habits tab shows a weekly and monthly calendar with completion dots so you can see patterns at a glance.",
     hint: "Tip: Consistency matters more than perfection. Even partial adherence gives useful data.",
   },
   {
     emoji: "🏁",
     title: "You're ready to go",
-    body: "Head to the Community to browse what others are experimenting with, or jump straight into creating your first theory. Your profile tracks all your active and completed experiments in one place.",
+    body: "Head to the Community to browse what others are running, or jump straight into creating your first theory. Your profile tracks all your active and completed protocols in one place.",
     hint: null,
   },
 ];

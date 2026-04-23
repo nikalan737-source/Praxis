@@ -12,6 +12,8 @@ interface TheoryContext {
   theoryId: string;
   title: string;
   evidenceTier: string;
+  goalCategory?: string;
+  actionSteps?: string[];
   interventions: { name: string }[];
 }
 
@@ -21,12 +23,75 @@ interface ExperimentSetupModalProps {
   theory: TheoryContext;
 }
 
-interface HabitOption {
+interface ExistingHabit {
   id: string;
   actionText: string;
   frequency: string;
+  scheduledDays: string[];
   theoryTitle: string | null;
   goalCategory: string | null;
+}
+
+// Each candidate habit derived from the theory (actionSteps + interventions)
+interface CandidateHabit {
+  key: string;
+  actionText: string;
+  frequency: "daily" | "weekly" | "custom";
+  scheduledDays: string[];
+  source: "intervention" | "action_step";
+  matchedExisting?: ExistingHabit;
+}
+
+// ── Habit similarity (mirrors praxis-mobile/app/theory/[id].tsx) ──────────────
+
+const HABIT_STOP_WORDS = new Set([
+  "the", "a", "an", "and", "or", "of", "to", "in", "for", "with", "on", "at",
+  "by", "from", "is", "are", "be", "your", "you", "this", "that", "it", "its",
+  "per", "min", "before", "after", "during", "between", "each", "every", "no",
+]);
+
+function extractKeywords(text: string): Set<string> {
+  return new Set(
+    text
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, " ")
+      .split(/\s+/)
+      .filter((w) => w.length > 2 && !HABIT_STOP_WORDS.has(w))
+  );
+}
+
+function computeSimilarity(a: Set<string>, b: Set<string>): number {
+  if (a.size === 0 || b.size === 0) return 0;
+  let overlap = 0;
+  Array.from(a).forEach((w) => {
+    if (b.has(w)) overlap++;
+  });
+  return overlap / Math.min(a.size, b.size);
+}
+
+function findSimilarHabit(
+  newName: string,
+  existing: ExistingHabit[]
+): ExistingHabit | undefined {
+  const kw = extractKeywords(newName);
+  if (kw.size === 0) return undefined;
+  let best: ExistingHabit | undefined;
+  let bestScore = 0;
+  for (const h of existing) {
+    const score = computeSimilarity(kw, extractKeywords(h.actionText));
+    if (score > bestScore && score >= 0.4) {
+      bestScore = score;
+      best = h;
+    }
+  }
+  return best;
+}
+
+function labelForFrequency(c: CandidateHabit): string {
+  if (c.frequency === "daily" || c.scheduledDays.length === 7) return "Daily";
+  if (c.scheduledDays.length === 1) return `Weekly · ${c.scheduledDays[0]}`;
+  if (c.scheduledDays.length > 0) return c.scheduledDays.join(" · ");
+  return c.frequency;
 }
 
 const DURATION_OPTIONS = [
@@ -49,6 +114,8 @@ const CHECKIN_FREQ = [
   { label: "No reminders", value: "none" },
 ];
 
+const ALL_DAY_ABBRS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const;
+
 function todayISO(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -70,47 +137,126 @@ export function ExperimentSetupModal({ isOpen, onClose, theory }: ExperimentSetu
   const [categories, setCategories] = useState<string[]>([]);
   const [primaryMetric, setPrimaryMetric] = useState("");
 
-  // Step 3 — Habit selection
-  const [habits, setHabits] = useState<HabitOption[]>([]);
-  const [habitsLoading, setHabitsLoading] = useState(true);
-  const [selectedHabitIds, setSelectedHabitIds] = useState<Set<string>>(new Set());
+  // Step 3 — Habit selection (theory-derived candidates with merge detection)
+  const [candidates, setCandidates] = useState<CandidateHabit[]>([]);
+  const [candidatesLoading, setCandidatesLoading] = useState(true);
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
+  const [mergeMap, setMergeMap] = useState<Map<string, ExistingHabit>>(new Map());
+  const [existingHabits, setExistingHabits] = useState<ExistingHabit[]>([]);
+  const [changeMergeFor, setChangeMergeFor] = useState<string | null>(null);
 
   // Step 4
   const [checkinTypes, setCheckinTypes] = useState<string[]>(["Text updates"]);
   const [checkinFreq, setCheckinFreq] = useState("weekly");
 
-  // Fetch habits on mount
+  // Build candidate list from theory + fetch suggestions + find similar existing habits
   useEffect(() => {
     if (!isOpen) return;
-    fetch("/api/habits")
-      .then((res) => (res.ok ? res.json() : []))
-      .then((data) => {
-        const mapped: HabitOption[] = (data ?? []).map((h: Record<string, unknown>) => ({
-          id: h.id as string,
-          actionText: h.actionText as string,
-          frequency: h.frequency as string,
-          theoryTitle: (h.theoryTitle as string) ?? null,
-          goalCategory: (h.goalCategory as string) ?? null,
-        }));
-        setHabits(mapped);
-      })
-      .catch(() => setHabits([]))
-      .finally(() => setHabitsLoading(false));
-  }, [isOpen]);
+    let cancelled = false;
 
-  // If no habits, skip step 3 automatically
-  const hasHabits = habits.length > 0;
-  const TOTAL_STEPS = hasHabits ? 5 : 4;
+    async function load() {
+      setCandidatesLoading(true);
 
-  // Map logical step to visual step (skip habits step if no habits)
-  function logicalStep(): number {
-    if (hasHabits) return step;
-    // No habits: steps are 1,2,4,5 → map step 3→4, step 4→5
-    if (step >= 3) return step + 1;
-    return step;
-  }
+      // Candidates: interventions first, then actionSteps that don't dupe intervention text
+      const seen = new Set<string>();
+      const raw: { key: string; actionText: string; source: "intervention" | "action_step" }[] = [];
 
-  const ls = logicalStep();
+      for (const iv of theory.interventions ?? []) {
+        const key = iv.name.trim().toLowerCase();
+        if (!key || seen.has(key)) continue;
+        seen.add(key);
+        raw.push({ key: `iv::${key}`, actionText: iv.name, source: "intervention" });
+      }
+      for (const step of theory.actionSteps ?? []) {
+        const key = step.trim().toLowerCase();
+        if (!key || seen.has(key)) continue;
+        seen.add(key);
+        raw.push({ key: `as::${key}`, actionText: step, source: "action_step" });
+      }
+
+      // Pre-seed with defaults so the UI renders immediately
+      const seeded: CandidateHabit[] = raw.map((c) => ({
+        key: c.key,
+        actionText: c.actionText,
+        frequency: "daily",
+        scheduledDays: Array.from(ALL_DAY_ABBRS),
+        source: c.source,
+      }));
+
+      if (!cancelled) {
+        setCandidates(seeded);
+        setSelectedKeys(new Set(seeded.map((c) => c.key)));
+      }
+
+      // Load existing habits for merge detection
+      const existing: ExistingHabit[] = await fetch("/api/habits")
+        .then((res) => (res.ok ? res.json() : []))
+        .then((data) =>
+          (data ?? []).map((h: Record<string, unknown>) => ({
+            id: h.id as string,
+            actionText: h.actionText as string,
+            frequency: h.frequency as string,
+            scheduledDays: (h.scheduledDays as string[]) ?? [],
+            theoryTitle: (h.theoryTitle as string) ?? null,
+            goalCategory: (h.goalCategory as string) ?? null,
+          }))
+        )
+        .catch(() => [] as ExistingHabit[]);
+
+      if (cancelled) return;
+      setExistingHabits(existing);
+
+      // Fetch frequency suggestions in parallel and run merge detection
+      const enriched = await Promise.all(
+        seeded.map(async (c) => {
+          let freq: "daily" | "weekly" | "custom" = "daily";
+          let days: string[] = Array.from(ALL_DAY_ABBRS);
+          try {
+            const res = await fetch("/api/habits/suggest", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                actionText: c.actionText,
+                goalCategory: theory.goalCategory,
+                evidenceTier: theory.evidenceTier,
+              }),
+            });
+            if (res.ok) {
+              const data = (await res.json()) as {
+                frequency?: "daily" | "weekly" | "custom";
+                scheduledDays?: string[];
+              };
+              freq = data.frequency ?? "daily";
+              days = Array.isArray(data.scheduledDays) && data.scheduledDays.length > 0
+                ? data.scheduledDays
+                : Array.from(ALL_DAY_ABBRS);
+            }
+          } catch {
+            // keep defaults
+          }
+          const match = findSimilarHabit(c.actionText, existing);
+          return { ...c, frequency: freq, scheduledDays: days, matchedExisting: match };
+        })
+      );
+
+      if (cancelled) return;
+      setCandidates(enriched);
+
+      // Auto-seed merges for matched items
+      const autoMerge = new Map<string, ExistingHabit>();
+      for (const c of enriched) {
+        if (c.matchedExisting) autoMerge.set(c.key, c.matchedExisting);
+      }
+      setMergeMap(autoMerge);
+      setCandidatesLoading(false);
+    }
+
+    void load();
+    return () => { cancelled = true; };
+  }, [isOpen, theory.actionSteps, theory.interventions, theory.goalCategory, theory.evidenceTier]);
+
+  const TOTAL_STEPS = 5;
+  const ls = step; // direct mapping now — no optional step skipping
 
   function toggleCategory(cat: string) {
     setCategories((prev) =>
@@ -124,14 +270,43 @@ export function ExperimentSetupModal({ isOpen, onClose, theory }: ExperimentSetu
     );
   }
 
-  function toggleHabit(id: string) {
-    setSelectedHabitIds((prev) => {
+  function toggleCandidate(key: string) {
+    setSelectedKeys((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
       return next;
     });
   }
+
+  function selectAllCandidates() {
+    if (selectedKeys.size === candidates.length) {
+      setSelectedKeys(new Set());
+    } else {
+      setSelectedKeys(new Set(candidates.map((c) => c.key)));
+    }
+  }
+
+  function applyMerge(key: string, existing: ExistingHabit) {
+    setMergeMap((prev) => {
+      const next = new Map(prev);
+      next.set(key, existing);
+      return next;
+    });
+    setChangeMergeFor(null);
+  }
+
+  function removeMerge(key: string) {
+    setMergeMap((prev) => {
+      const next = new Map(prev);
+      next.delete(key);
+      return next;
+    });
+  }
+
+  const selectedCandidates = candidates.filter((c) => selectedKeys.has(c.key));
+  const mergedCount = selectedCandidates.filter((c) => mergeMap.has(c.key)).length;
+  const newCount = selectedCandidates.length - mergedCount;
 
   function selectDuration(label: string, days: number) {
     setDurationLabel(label);
@@ -165,17 +340,50 @@ export function ExperimentSetupModal({ isOpen, onClose, theory }: ExperimentSetu
           followedInterventions: theory.interventions.map((iv) => iv.name),
         }),
       });
-      if (!res.ok) throw new Error("Failed to create experiment");
+      if (!res.ok) throw new Error("Failed to create protocol");
       const data = await res.json();
 
-      // Link selected habits
-      if (selectedHabitIds.size > 0) {
+      // Resolve selected candidates → habit ids.
+      //  - Merged candidates reuse the existing habit id.
+      //  - New candidates POST to /api/habits and capture the new id.
+      const habitIds: string[] = [];
+      for (const c of selectedCandidates) {
+        const merged = mergeMap.get(c.key);
+        if (merged) {
+          habitIds.push(merged.id);
+          continue;
+        }
+        try {
+          const hRes = await fetch("/api/habits", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              actionText: c.actionText,
+              goalCategory: theory.goalCategory,
+              evidenceTier: theory.evidenceTier,
+              theoryId: theory.theoryId,
+              theoryTitle: theory.title,
+              frequency: c.frequency,
+              scheduledDays: c.scheduledDays,
+            }),
+          });
+          if (hRes.ok) {
+            const habit = (await hRes.json()) as { id: string };
+            if (habit?.id) habitIds.push(habit.id);
+          }
+        } catch {
+          // skip — we'll still link what we have
+        }
+      }
+
+      // Link all resolved habits to the new protocol
+      if (habitIds.length > 0) {
         await fetch("/api/experiment-habits", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             experimentId: data.experimentId,
-            habitIds: Array.from(selectedHabitIds),
+            habitIds,
           }),
         });
       }
@@ -200,7 +408,7 @@ export function ExperimentSetupModal({ isOpen, onClose, theory }: ExperimentSetu
         {/* Header */}
         <div className="p-5 border-b border-border">
           <div className="flex items-center justify-between">
-            <h2 className="font-semibold text-foreground text-lg">Start Experiment</h2>
+            <h2 className="font-semibold text-foreground text-lg">Start Protocol</h2>
             <button type="button" onClick={onClose} className="text-muted-foreground hover:text-foreground text-xl leading-none">×</button>
           </div>
           {/* Step indicator */}
@@ -320,37 +528,88 @@ export function ExperimentSetupModal({ isOpen, onClose, theory }: ExperimentSetu
             </>
           )}
 
-          {/* ── Step 3: Habit selection (only shown if user has habits) ── */}
-          {ls === 3 && hasHabits && (
+          {/* ── Step 3: Select Habits from this theory ── */}
+          {ls === 3 && (
             <>
               <div className="space-y-2">
-                <Label className="text-xs">Link habits to this experiment</Label>
+                <div className="flex items-center justify-between gap-2">
+                  <Label className="text-xs">Select habits</Label>
+                  {candidates.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={selectAllCandidates}
+                      className="text-[11px] text-primary font-medium hover:opacity-80"
+                    >
+                      {selectedKeys.size === candidates.length ? "Deselect all" : "Select all"}
+                    </button>
+                  )}
+                </div>
                 <p className="text-[11px] text-muted-foreground leading-relaxed">
-                  Select habits you want to track alongside this experiment. They will appear as a checklist in each journal entry.
+                  Habits similar to ones you already track will merge automatically — one check-off counts for all protocols.
                 </p>
               </div>
 
-              {habitsLoading ? (
-                <p className="text-xs text-muted-foreground animate-pulse py-3">Loading habits…</p>
+              {candidatesLoading && candidates.length === 0 ? (
+                <p className="text-xs text-muted-foreground animate-pulse py-3">Building habit list…</p>
+              ) : candidates.length === 0 ? (
+                <p className="text-xs text-muted-foreground py-3">
+                  This theory doesn&apos;t include specific action steps. You can still start the protocol and add habits later.
+                </p>
+              ) : changeMergeFor !== null ? (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-xs font-semibold text-foreground">Merge with existing</p>
+                    <button
+                      type="button"
+                      onClick={() => setChangeMergeFor(null)}
+                      className="text-[11px] text-muted-foreground hover:text-foreground"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                  <div className="space-y-1.5 max-h-64 overflow-y-auto">
+                    {existingHabits.length === 0 ? (
+                      <p className="text-xs text-muted-foreground py-2">You have no existing habits to merge with.</p>
+                    ) : (
+                      existingHabits.map((eh) => (
+                        <button
+                          key={eh.id}
+                          type="button"
+                          onClick={() => applyMerge(changeMergeFor, eh)}
+                          className="w-full text-left p-2.5 rounded-lg border border-border bg-secondary/30 hover:border-primary/40 transition-colors"
+                        >
+                          <p className="text-sm text-foreground leading-snug line-clamp-2">{eh.actionText}</p>
+                          {eh.theoryTitle && (
+                            <p className="text-[11px] text-muted-foreground mt-0.5 truncate">{eh.theoryTitle}</p>
+                          )}
+                        </button>
+                      ))
+                    )}
+                  </div>
+                </div>
               ) : (
-                <div className="space-y-2 max-h-64 overflow-y-auto">
-                  {habits.map((habit) => {
-                    const isSelected = selectedHabitIds.has(habit.id);
+                <div className="space-y-2 max-h-80 overflow-y-auto">
+                  {candidates.map((c) => {
+                    const isSelected = selectedKeys.has(c.key);
+                    const merged = mergeMap.get(c.key);
+                    const willMerge = !!merged;
                     return (
-                      <button
-                        key={habit.id}
-                        type="button"
-                        onClick={() => toggleHabit(habit.id)}
+                      <div
+                        key={c.key}
                         className={cn(
-                          "w-full text-left p-3 rounded-lg border transition-colors",
+                          "p-3 rounded-lg border transition-colors",
                           isSelected
-                            ? "bg-primary/10 border-primary/40"
-                            : "bg-secondary/50 border-border hover:border-primary/30"
+                            ? "bg-primary/5 border-primary/30"
+                            : "bg-secondary/40 border-border"
                         )}
                       >
-                        <div className="flex items-start gap-2.5">
+                        <button
+                          type="button"
+                          onClick={() => toggleCandidate(c.key)}
+                          className="w-full flex items-start gap-2.5 text-left"
+                        >
                           <div className={cn(
-                            "shrink-0 w-4.5 h-4.5 rounded border-2 mt-0.5 flex items-center justify-center transition-colors",
+                            "shrink-0 w-4 h-4 rounded border-2 mt-0.5 flex items-center justify-center transition-colors",
                             isSelected ? "bg-primary border-primary" : "border-border"
                           )}>
                             {isSelected && (
@@ -360,30 +619,71 @@ export function ExperimentSetupModal({ isOpen, onClose, theory }: ExperimentSetu
                               </svg>
                             )}
                           </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm text-foreground leading-snug">{habit.actionText}</p>
-                            <div className="flex items-center gap-2 mt-1 flex-wrap">
-                              <span className="text-[10px] text-muted-foreground bg-muted/40 rounded px-1.5 py-0.5">
-                                {habit.frequency}
+                          <div className="flex-1 min-w-0 space-y-1">
+                            <p className="text-sm text-foreground leading-snug">{c.actionText}</p>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="text-[10px] text-emerald-400 bg-emerald-500/10 rounded-full px-2 py-0.5 font-medium border border-emerald-500/20">
+                                {labelForFrequency(c)}
                               </span>
-                              {habit.theoryTitle && (
-                                <span className="text-[10px] text-muted-foreground truncate max-w-[150px]">
-                                  {habit.theoryTitle}
+                              {willMerge ? (
+                                <span className="text-[10px] font-semibold rounded-full px-2 py-0.5 bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                                  ↗ Will Merge
+                                </span>
+                              ) : (
+                                <span className="text-[10px] font-semibold rounded-full px-2 py-0.5 bg-muted/50 text-muted-foreground border border-border">
+                                  + New
                                 </span>
                               )}
                             </div>
                           </div>
-                        </div>
-                      </button>
+                        </button>
+
+                        {willMerge && merged && (
+                          <div className="mt-2 ml-6 flex items-start gap-2 text-[11px] text-muted-foreground">
+                            <span className="flex-1 truncate">Merging with: <span className="text-foreground">{merged.actionText}</span></span>
+                            <button
+                              type="button"
+                              onClick={() => removeMerge(c.key)}
+                              className="text-muted-foreground hover:text-foreground font-medium"
+                            >
+                              Undo
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setChangeMergeFor(c.key)}
+                              className="text-primary hover:opacity-80 font-medium"
+                            >
+                              Change…
+                            </button>
+                          </div>
+                        )}
+
+                        {!willMerge && existingHabits.length > 0 && (
+                          <div className="mt-2 ml-6">
+                            <button
+                              type="button"
+                              onClick={() => setChangeMergeFor(c.key)}
+                              className="text-[11px] text-primary hover:opacity-80 font-medium"
+                            >
+                              Merge with existing habit…
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     );
                   })}
                 </div>
               )}
 
-              {selectedHabitIds.size > 0 && (
-                <p className="text-xs text-primary font-mono">
-                  {selectedHabitIds.size} habit{selectedHabitIds.size !== 1 ? "s" : ""} selected
-                </p>
+              {selectedCandidates.length > 0 && changeMergeFor === null && (
+                <div className="pt-1 space-y-0.5 text-xs">
+                  {mergedCount > 0 && (
+                    <p className="text-emerald-400">↗ {mergedCount} habit{mergedCount !== 1 ? "s" : ""} merging with existing</p>
+                  )}
+                  {newCount > 0 && (
+                    <p className="text-muted-foreground">+ {newCount} new habit{newCount !== 1 ? "s" : ""} will be created</p>
+                  )}
+                </div>
               )}
             </>
           )}
@@ -473,10 +773,14 @@ export function ExperimentSetupModal({ isOpen, onClose, theory }: ExperimentSetu
                   <span className="text-muted-foreground">Check-ins</span>
                   <span className="text-foreground">{checkinTypes.join(", ")} · {checkinFreq}</span>
                 </div>
-                {selectedHabitIds.size > 0 && (
+                {selectedCandidates.length > 0 && (
                   <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Linked habits</span>
-                    <span className="text-foreground font-mono">{selectedHabitIds.size}</span>
+                    <span className="text-muted-foreground">Habits</span>
+                    <span className="text-foreground font-mono text-right">
+                      {mergedCount > 0 && <span className="text-emerald-400">↗ {mergedCount} merging</span>}
+                      {mergedCount > 0 && newCount > 0 && <span className="text-muted-foreground"> · </span>}
+                      {newCount > 0 && <span>+ {newCount} new</span>}
+                    </span>
                   </div>
                 )}
               </div>
@@ -502,7 +806,7 @@ export function ExperimentSetupModal({ isOpen, onClose, theory }: ExperimentSetu
             </Button>
           ) : (
             <Button size="sm" onClick={handleConfirm} disabled={saving}>
-              {saving ? "Starting…" : "Start Experiment"}
+              {saving ? "Starting…" : "Start Protocol"}
             </Button>
           )}
         </div>

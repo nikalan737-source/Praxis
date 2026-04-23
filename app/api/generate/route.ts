@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 import { GenerateResultSchema } from "@/lib/theory-block-schema";
 import type { PubMedArticle } from "@/types/theory-block";
+import { createClient } from "@/lib/supabase/server";
+import { FREE_TIER_MONTHLY_GENERATIONS } from "@/lib/stripe";
 
 const openai = () => {
   const apiKey = process.env.OPENAI_API_KEY;
@@ -208,6 +210,37 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "OpenAI API key not configured." }, { status: 503 });
     }
 
+    // ── Check generation limits for authenticated users ──────────────────────
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (user) {
+      const currentMonth = new Date().toISOString().slice(0, 7); // 'YYYY-MM'
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("is_pro, theory_generations_this_month, generation_month")
+        .eq("id", user.id)
+        .single();
+
+      if (profile && !profile.is_pro) {
+        const activeMonth = profile.generation_month === currentMonth
+          ? profile.theory_generations_this_month
+          : 0;
+
+        if (activeMonth >= FREE_TIER_MONTHLY_GENERATIONS) {
+          return NextResponse.json(
+            {
+              error: "limit_reached",
+              message: `You've used all ${FREE_TIER_MONTHLY_GENERATIONS} free theory generations this month. Upgrade to Praxis Pro for unlimited generations.`,
+              used: activeMonth,
+              limit: FREE_TIER_MONTHLY_GENERATIONS,
+            },
+            { status: 429 }
+          );
+        }
+      }
+    }
+
     const body = await request.json();
     const { goal } = body;
     if (typeof goal !== "string" || !goal.trim()) {
@@ -259,6 +292,25 @@ export async function POST(request: NextRequest) {
 
     const first = GenerateResultSchema.safeParse(parsed);
     if (first.success) {
+      // Increment generation counter for authenticated free users
+      if (user) {
+        const currentMonth = new Date().toISOString().slice(0, 7);
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("is_pro, theory_generations_this_month, generation_month")
+          .eq("id", user.id)
+          .single();
+
+        if (profile && !profile.is_pro) {
+          const newCount = profile.generation_month === currentMonth
+            ? profile.theory_generations_this_month + 1
+            : 1;
+          await supabase
+            .from("profiles")
+            .update({ theory_generations_this_month: newCount, generation_month: currentMonth })
+            .eq("id", user.id);
+        }
+      }
       return NextResponse.json({ blocks: first.data.blocks, articles, searchQuery: queries.join(" · ") });
     }
 

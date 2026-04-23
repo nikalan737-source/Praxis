@@ -29,6 +29,7 @@ export async function GET(request: NextRequest) {
         notes: e.notes,
         sideEffects: e.side_effects ?? undefined,
         photoUrls: e.photo_urls ?? [],
+        isPublic: e.is_public ?? true,
         createdAt: e.created_at,
       }))
     );
@@ -83,6 +84,7 @@ export async function POST(request: NextRequest) {
       notes: data.notes,
       sideEffects: data.side_effects ?? undefined,
       photoUrls: data.photo_urls ?? [],
+      isPublic: data.is_public ?? true,
       createdAt: data.created_at,
     });
   } catch (e) {

@@ -375,7 +375,7 @@ function TheoryCard({
             <span className="font-medium text-foreground">{saveCount}</span> saved
           </span>
           <span className="text-xs text-muted-foreground font-mono">
-            <span className="font-medium text-foreground">{logCount}</span> {logCount === 1 ? "experiment" : "experiments"}
+            <span className="font-medium text-foreground">{logCount}</span> {logCount === 1 ? "protocol" : "protocols"}
             {logCount > 0 && <span> · {avgOutcome}/10 avg</span>}
           </span>
           <span className="text-xs text-muted-foreground font-mono">Risk {block.riskLevel}</span>
@@ -383,7 +383,7 @@ function TheoryCard({
           <div className="ml-auto flex items-center gap-2">
             <Button variant="default" size="sm" className="h-7 text-xs px-3"
               onClick={() => onStartExperiment(block)}>
-              Start Experiment
+              Start Protocol
             </Button>
             <Button
               variant={expandedPanel === "theory" ? "secondary" : "outline"}
@@ -542,7 +542,7 @@ type SortMode = "popular" | "recent" | "most_experiments" | "highest_rated";
 const SORT_OPTIONS: { value: SortMode; label: string }[] = [
   { value: "popular", label: "Popular" },
   { value: "recent", label: "Recent" },
-  { value: "most_experiments", label: "Most experiments" },
+  { value: "most_experiments", label: "Most protocols" },
   { value: "highest_rated", label: "Highest rated" },
 ];
 
@@ -718,6 +718,8 @@ export default function CommunityPage() {
             theoryId: experimentTheory.id,
             title: experimentTheory.title,
             evidenceTier: experimentTheory.evidenceTier,
+            goalCategory: experimentTheory.goalCategory,
+            actionSteps: experimentTheory.actionSteps ?? [],
             interventions: experimentTheory.interventions.map((iv) => ({ name: iv.name })),
           }}
         />

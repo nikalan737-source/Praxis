@@ -5,7 +5,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 
 export const metadata: Metadata = {
   title: "Praxis",
-  description: "Evidence-based theory blocks for your health experiments.",
+  description: "Evidence-based theory blocks for your health protocols.",
 };
 
 export default function RootLayout({

@@ -15,6 +15,7 @@ function mapRow(row: Record<string, unknown>) {
     outcomeRating: row.outcome_rating,
     notes: (row.notes as string) ?? "",
     sideEffects: (row.side_effects as string) ?? "",
+    durationDays: (row.duration_days as number | null) ?? 56,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -33,7 +34,7 @@ export async function POST(request: NextRequest) {
     const {
       theoryId, startedAt, endedAt, status, isPublic,
       adherencePercent, followedInterventions, skippedInterventions,
-      outcomeRating, notes, sideEffects,
+      outcomeRating, notes, sideEffects, durationDays,
     } = body;
 
     if (typeof theoryId !== "string" || !theoryId.trim()) {
@@ -55,6 +56,7 @@ export async function POST(request: NextRequest) {
         outcome_rating: outcomeRating ?? null,
         notes: notes ?? "",
         side_effects: sideEffects ?? "",
+        duration_days: typeof durationDays === "number" ? durationDays : 56,
       })
       .select("*")
       .single();

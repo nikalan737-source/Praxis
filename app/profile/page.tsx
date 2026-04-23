@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, useMemo } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSavedTheories } from "@/hooks/useSavedTheories";
@@ -70,6 +70,64 @@ function isCompleted(
   );
 }
 
+// ── Schedule formatter ────────────────────────────────────────────────────────
+
+function formatScheduleLabel(habit: Habit): string {
+  if (habit.frequency === "daily") return "Daily";
+  if (!habit.scheduledDays || habit.scheduledDays.length === 0) return "Custom";
+  if (habit.scheduledDays.length === 7) return "Daily";
+  return habit.scheduledDays.map((d) => d.slice(0, 3)).join(" · ");
+}
+
+// ── Habit similarity / merge detection ────────────────────────────────────────
+
+const HABIT_STOP_WORDS = new Set([
+  "the", "a", "an", "and", "or", "of", "to", "in", "for", "with", "on", "at",
+  "by", "from", "is", "are", "be", "your", "you", "this", "that", "it", "its",
+  "per", "min", "before", "after", "during", "between", "each", "every", "no",
+]);
+
+function extractKeywords(text: string): Set<string> {
+  return new Set(
+    text
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, " ")
+      .split(/\s+/)
+      .filter((w) => w.length > 2 && !HABIT_STOP_WORDS.has(w))
+  );
+}
+
+function computeSimilarity(a: Set<string>, b: Set<string>): number {
+  if (a.size === 0 || b.size === 0) return 0;
+  let overlap = 0;
+  Array.from(a).forEach((w) => {
+    if (b.has(w)) overlap++;
+  });
+  return overlap / Math.min(a.size, b.size);
+}
+
+function findSimilarHabit(
+  newName: string,
+  existingHabits: Habit[]
+): Habit | undefined {
+  const newKw = extractKeywords(newName);
+  if (newKw.size === 0) return undefined;
+
+  let bestMatch: Habit | undefined;
+  let bestScore = 0;
+
+  for (const existing of existingHabits) {
+    const existKw = extractKeywords(existing.actionText);
+    const score = computeSimilarity(newKw, existKw);
+    if (score > bestScore && score >= 0.4) {
+      bestScore = score;
+      bestMatch = existing;
+    }
+  }
+
+  return bestMatch;
+}
+
 // ── HabitSchedulePicker ───────────────────────────────────────────────────────
 
 interface PickerProps {
@@ -97,23 +155,35 @@ function HabitSchedulePicker({
   const [rationale, setRationale] = useState("");
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
+  const [matchedExisting, setMatchedExisting] = useState<Habit | null>(null);
+  const [mergeMode, setMergeMode] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
-    async function suggest() {
+    async function load() {
       try {
-        const res = await fetch("/api/habits/suggest", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ actionText, goalCategory, evidenceTier }),
-        });
-        const data = res.ok ? await res.json() : null;
-        if (!cancelled) {
-          setFrequency(data?.frequency ?? "daily");
-          setSelectedDays(data?.scheduledDays ?? Array.from(ALL_DAYS));
-          setRationale(data?.rationale ?? "");
-          setLoading(false);
-        }
+        const [suggestRes, habitsRes] = await Promise.all([
+          fetch("/api/habits/suggest", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ actionText, goalCategory, evidenceTier }),
+          }),
+          fetch("/api/habits"),
+        ]);
+
+        const suggestData = suggestRes.ok ? await suggestRes.json() : null;
+        const existingHabits: Habit[] = habitsRes.ok ? await habitsRes.json() : [];
+
+        if (cancelled) return;
+
+        setFrequency(suggestData?.frequency ?? "daily");
+        setSelectedDays(suggestData?.scheduledDays ?? Array.from(ALL_DAYS));
+        setRationale(suggestData?.rationale ?? "");
+
+        const match = findSimilarHabit(actionText, existingHabits);
+        setMatchedExisting(match ?? null);
+        setMergeMode(!!match);
+        setLoading(false);
       } catch {
         if (!cancelled) {
           setFrequency("daily");
@@ -122,7 +192,7 @@ function HabitSchedulePicker({
         }
       }
     }
-    void suggest();
+    void load();
     return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -137,6 +207,13 @@ function HabitSchedulePicker({
     if (saving) return;
     setSaving(true);
     setSaveError("");
+
+    // Merge path: skip POST, the existing habit already covers this action step.
+    if (matchedExisting && mergeMode) {
+      onSave(matchedExisting);
+      return;
+    }
+
     try {
       const res = await fetch("/api/habits", {
         method: "POST",
@@ -168,14 +245,47 @@ function HabitSchedulePicker({
     );
   }
 
+  const willMerge = !!matchedExisting && mergeMode;
+
   return (
     <div className="mt-2 p-3 bg-emerald-500/8 rounded-lg border border-emerald-500/20 space-y-3">
-      <p className="text-xs font-semibold text-emerald-400">Add to Habits</p>
-      {rationale && (
+      <div className="flex items-center gap-2 flex-wrap">
+        <p className="text-xs font-semibold text-emerald-400">Add to Habits</p>
+        {willMerge ? (
+          <span className="text-[10px] font-semibold rounded-full px-2 py-0.5 bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+            ↗ Will Merge
+          </span>
+        ) : (
+          <span className="text-[10px] font-semibold rounded-full px-2 py-0.5 bg-muted/50 text-muted-foreground border border-border">
+            + New
+          </span>
+        )}
+      </div>
+
+      {matchedExisting && (
+        <div className="p-2 rounded-md bg-emerald-500/5 border border-emerald-500/20 space-y-1.5">
+          <p className="text-[11px] text-muted-foreground">
+            {willMerge ? "Merging with existing habit:" : "Similar habit already tracked:"}
+          </p>
+          <p className="text-xs text-foreground leading-snug line-clamp-2">
+            {matchedExisting.actionText}
+          </p>
+          <button
+            type="button"
+            onClick={() => setMergeMode((m) => !m)}
+            className="text-[11px] text-emerald-400 hover:text-emerald-300 font-medium transition-colors"
+          >
+            {willMerge ? "Create new habit instead" : "Merge with existing"}
+          </button>
+        </div>
+      )}
+
+      {rationale && !willMerge && (
         <p className="text-xs text-muted-foreground italic">{rationale}</p>
       )}
 
-      {/* Day chips */}
+      {/* Day chips — only when creating a new habit */}
+      {!willMerge && (
       <div>
         <p className="text-xs text-muted-foreground mb-1.5">Scheduled days</p>
         <div className="flex flex-wrap gap-1.5">
@@ -196,8 +306,10 @@ function HabitSchedulePicker({
           ))}
         </div>
       </div>
+      )}
 
-      {/* Frequency */}
+      {/* Frequency — only when creating a new habit */}
+      {!willMerge && (
       <div className="flex items-center gap-2 flex-wrap">
         <p className="text-xs text-muted-foreground shrink-0">Frequency:</p>
         <div className="flex gap-1">
@@ -218,12 +330,21 @@ function HabitSchedulePicker({
           ))}
         </div>
       </div>
+      )}
 
       {saveError && <p className="text-xs text-red-400">{saveError}</p>}
 
       <div className="flex gap-2">
-        <Button size="sm" onClick={handleSave} disabled={saving || selectedDays.length === 0}>
-          {saving ? "Saving…" : "Save to Habits"}
+        <Button
+          size="sm"
+          onClick={handleSave}
+          disabled={saving || (!willMerge && selectedDays.length === 0)}
+        >
+          {saving
+            ? "Saving…"
+            : willMerge
+            ? "Link to this habit"
+            : "Save to Habits"}
         </Button>
         <Button size="sm" variant="ghost" onClick={onCancel}>Cancel</Button>
       </div>
@@ -306,13 +427,48 @@ function HabitsTab() {
   }
 
   async function removeHabit(id: string) {
-    await fetch(`/api/habits/${id}`, { method: "DELETE" });
-    setHabits((prev) => prev.filter((h) => h.id !== id));
+    if (typeof window !== "undefined") {
+      const ok = window.confirm(
+        "Delete habit? This will also remove all completion history for this habit."
+      );
+      if (!ok) return;
+    }
+    const prevHabits = habits;
+    const prevCompletions = completions;
+    setHabits((h) => h.filter((x) => x.id !== id));
+    setCompletions((c) => c.filter((x) => x.habitId !== id));
+    try {
+      const res = await fetch(`/api/habits/${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("delete failed");
+    } catch {
+      setHabits(prevHabits);
+      setCompletions(prevCompletions);
+    }
   }
 
   const displayDate = week[selectedDayIdx];
   const isToday = selectedDayIdx === todayIdx;
   const dayHabits = habitsForDayIdx(habits, selectedDayIdx);
+
+  const dayCompletedCount = dayHabits.filter((h) =>
+    isCompleted(completions, h.id, displayDate)
+  ).length;
+  const dayTotal = dayHabits.length;
+  const dayPct = dayTotal === 0 ? 0 : Math.round((dayCompletedCount / dayTotal) * 100);
+  const dayAllDone = dayTotal > 0 && dayCompletedCount === dayTotal;
+
+  const weekPct = useMemo(() => {
+    let scheduled = 0;
+    let done = 0;
+    for (let i = 0; i < 7; i++) {
+      const d = week[i];
+      if (!d || d > today) continue;
+      const dayList = habitsForDayIdx(habits, i);
+      scheduled += dayList.length;
+      done += dayList.filter((h) => isCompleted(completions, h.id, d)).length;
+    }
+    return scheduled === 0 ? 0 : Math.round((done / scheduled) * 100);
+  }, [habits, completions, week, today]);
 
   if (loading) {
     return (
@@ -337,6 +493,34 @@ function HabitsTab() {
 
   return (
     <div className="space-y-6">
+      {/* Adherence header */}
+      <div className="space-y-1.5">
+        <div className="flex items-center gap-3">
+          <p className="text-sm font-semibold text-foreground">
+            {dayAllDone
+              ? "All done!"
+              : `${dayCompletedCount}/${dayTotal} complete`}
+          </p>
+          <p className="text-xs text-muted-foreground ml-auto">
+            This week · <span className="text-foreground font-medium">{weekPct}%</span>
+          </p>
+          <span
+            className={cn(
+              "text-sm font-bold tabular-nums",
+              dayAllDone ? "text-emerald-400" : "text-foreground"
+            )}
+          >
+            {dayPct}%
+          </span>
+        </div>
+        <div className="h-1 bg-muted/50 rounded-full overflow-hidden">
+          <div
+            className="h-full bg-emerald-500 rounded-full transition-all duration-500 ease-out"
+            style={{ width: `${dayPct}%` }}
+          />
+        </div>
+      </div>
+
       {/* Weekly strip */}
       <div className="grid grid-cols-7 gap-1">
         {ALL_DAYS.map((day, i) => {
@@ -428,7 +612,7 @@ function HabitsTab() {
                     {habit.theoryTitle && (
                       <p className="text-xs text-muted-foreground mt-0.5 truncate">{habit.theoryTitle}</p>
                     )}
-                    <div className="flex flex-wrap gap-1 mt-1.5">
+                    <div className="flex flex-wrap items-center gap-2 mt-1.5">
                       {habit.evidenceTier && (
                         <span className={cn(
                           "text-[10px] rounded px-1.5 py-0.5 font-medium",
@@ -440,13 +624,9 @@ function HabitsTab() {
                           {habit.evidenceTier}
                         </span>
                       )}
-                      {habit.frequency === "daily" ? (
-                        <span className="text-[10px] text-emerald-400 bg-emerald-500/10 rounded px-1.5 py-0.5">daily</span>
-                      ) : (
-                        habit.scheduledDays.map((d) => (
-                          <span key={d} className="text-[10px] text-muted-foreground bg-muted/40 rounded px-1.5 py-0.5">{d}</span>
-                        ))
-                      )}
+                      <span className="text-[11px] text-muted-foreground font-medium">
+                        {formatScheduleLabel(habit)}
+                      </span>
                     </div>
                   </div>
 
@@ -568,7 +748,7 @@ function HabitsTab() {
                   {habit.theoryTitle && (
                     <p className="text-xs text-muted-foreground mt-0.5 truncate">{habit.theoryTitle}</p>
                   )}
-                  <div className="flex flex-wrap gap-1 mt-1">
+                  <div className="flex flex-wrap items-center gap-2 mt-1">
                     {habit.evidenceTier && (
                       <span className={cn(
                         "text-[10px] rounded px-1.5 py-0.5 font-medium",
@@ -580,13 +760,9 @@ function HabitsTab() {
                         {habit.evidenceTier}
                       </span>
                     )}
-                    {habit.frequency === "daily" ? (
-                      <span className="text-[10px] text-emerald-400 bg-emerald-500/10 rounded px-1.5 py-0.5">daily</span>
-                    ) : (
-                      habit.scheduledDays.map((d) => (
-                        <span key={d} className="text-[10px] text-muted-foreground bg-muted/40 rounded px-1.5 py-0.5">{d}</span>
-                      ))
-                    )}
+                    <span className="text-[11px] text-muted-foreground font-medium">
+                      {formatScheduleLabel(habit)}
+                    </span>
                   </div>
                 </div>
                 <button
@@ -693,7 +869,7 @@ function SavedCard({
                 className="h-7 text-xs px-3"
                 onClick={() => onStartExperiment(block)}
               >
-                Start Experiment
+                Start Protocol
               </Button>
             )}
             <Button
@@ -1087,9 +1263,201 @@ interface CompletedExperiment {
   outcomeRating: number | null;
 }
 
+interface JournalEntry {
+  id: string;
+  experimentId: string;
+  entryDate: string;
+  rating: number;
+  notes: string;
+  isPublic: boolean;
+  createdAt: string;
+}
+
+function ratingColor(rating: number): string {
+  if (rating >= 7) return "text-emerald-400 bg-emerald-500/15";
+  if (rating >= 4) return "text-amber-400 bg-amber-500/15";
+  return "text-rose-400 bg-rose-500/15";
+}
+
+function formatEntryDate(dateStr: string): string {
+  return new Date(dateStr + "T12:00:00").toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+  });
+}
+
+// ── ProtocolCard (active, expandable) ─────────────────────────────────────────
+
+function ProtocolCard({
+  exp,
+  entries,
+  onToggleEntryPublic,
+}: {
+  exp: ActiveExperiment;
+  entries: JournalEntry[];
+  onToggleEntryPublic: (experimentId: string, entryId: string, newValue: boolean) => void;
+}) {
+  const [showHistory, setShowHistory] = useState(false);
+
+  const today = todayStr();
+  const daysElapsed = daysBetween(exp.startedAt, today);
+  const progress = Math.min(100, Math.round((daysElapsed / exp.expectedDurationDays) * 100));
+  const daysSinceCheckin = exp.lastCheckinDate ? daysBetween(exp.lastCheckinDate, today) : null;
+
+  return (
+    <Card className="transition-colors">
+      <CardContent className="p-5">
+        {/* Header */}
+        <div className="flex items-start justify-between gap-3">
+          <Link href={`/experiment/${exp.experimentId}`} className="flex-1 min-w-0 group">
+            <h3 className="font-semibold text-foreground text-sm leading-normal truncate group-hover:text-primary transition-colors">
+              {exp.theoryTitle}
+            </h3>
+            {exp.primaryMetric && (
+              <p className="text-xs text-muted-foreground mt-0.5 italic truncate">
+                {exp.primaryMetric}
+              </p>
+            )}
+          </Link>
+          <Badge variant="default" className="text-[10px] shrink-0">Active</Badge>
+        </div>
+
+        {/* Progress bar */}
+        <div className="mt-3">
+          <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
+            <span className="font-mono">Day {daysElapsed} / {exp.expectedDurationDays}</span>
+            <span className="font-mono">{progress}%</span>
+          </div>
+          <div className="h-1.5 bg-border rounded-full overflow-hidden">
+            <div
+              className="h-full bg-primary rounded-full transition-all"
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+        </div>
+
+        {/* Meta row */}
+        <div className="mt-2 flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
+          <span className="font-mono">Started {exp.startedAt}</span>
+          {daysSinceCheckin !== null ? (
+            <span className={cn("font-mono", daysSinceCheckin > 7 ? "text-amber-500" : "")}>
+              Last check-in {daysSinceCheckin === 0 ? "today" : `${daysSinceCheckin}d ago`}
+            </span>
+          ) : (
+            <span className="text-amber-500 font-mono">No check-ins yet</span>
+          )}
+          {exp.adherencePercent !== null && (
+            <span className={cn(
+              "font-mono",
+              exp.adherencePercent >= 80 ? "text-emerald-500" :
+              exp.adherencePercent >= 50 ? "text-amber-500" : "text-rose-500"
+            )}>
+              {exp.adherencePercent}% adherence
+            </span>
+          )}
+        </div>
+
+        {/* Check-in history toggle */}
+        {entries.length > 0 && (
+          <>
+            <button
+              type="button"
+              onClick={() => setShowHistory((v) => !v)}
+              className="mt-4 w-full flex items-center justify-between px-3 py-2 rounded-lg bg-muted/30 border border-border hover:bg-muted/50 transition-colors"
+            >
+              <span className="text-xs font-semibold text-foreground">
+                {showHistory ? "Hide" : "View"} Check-ins ({entries.length})
+              </span>
+              <span className="text-xs text-muted-foreground">{showHistory ? "▲" : "▼"}</span>
+            </button>
+
+            {showHistory && (
+              <div className="mt-2 space-y-2">
+                {entries.map((entry) => {
+                  const daysIn = daysBetween(exp.startedAt, entry.entryDate);
+                  return (
+                    <div
+                      key={entry.id}
+                      className="p-3 rounded-lg bg-muted/20 border border-border space-y-2"
+                    >
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {entry.rating > 0 && (
+                          <span className={cn(
+                            "text-[11px] font-bold rounded px-1.5 py-0.5",
+                            ratingColor(entry.rating)
+                          )}>
+                            {entry.rating}/10
+                          </span>
+                        )}
+                        <span className="text-xs text-muted-foreground font-mono">
+                          {formatEntryDate(entry.entryDate)}
+                          {daysIn > 0 ? ` · Day ${daysIn}` : ""}
+                        </span>
+
+                        <div className="ml-auto flex items-center gap-2">
+                          {!entry.isPublic && (
+                            <span className="text-[10px] text-muted-foreground bg-muted/60 rounded px-1.5 py-0.5 font-medium">
+                              Private
+                            </span>
+                          )}
+                          <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                            <span className="text-[10px] text-muted-foreground">Public</span>
+                            <button
+                              type="button"
+                              role="switch"
+                              aria-checked={entry.isPublic}
+                              onClick={() =>
+                                onToggleEntryPublic(exp.experimentId, entry.id, !entry.isPublic)
+                              }
+                              className={cn(
+                                "relative inline-flex h-4 w-7 shrink-0 cursor-pointer rounded-full border transition-colors",
+                                entry.isPublic
+                                  ? "bg-emerald-600 border-emerald-600"
+                                  : "bg-muted border-border"
+                              )}
+                            >
+                              <span
+                                className={cn(
+                                  "inline-block h-3 w-3 rounded-full bg-white shadow transition-transform mt-[1px]",
+                                  entry.isPublic ? "translate-x-3.5" : "translate-x-0.5"
+                                )}
+                              />
+                            </button>
+                          </label>
+                        </div>
+                      </div>
+
+                      {entry.notes && (
+                        <p className="text-xs text-foreground/80 leading-relaxed line-clamp-3">
+                          {entry.notes}
+                        </p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </>
+        )}
+
+        {/* Check-in link */}
+        <div className="mt-3 flex">
+          <Link
+            href={`/experiment/${exp.experimentId}`}
+            className="text-xs font-semibold text-primary hover:opacity-80"
+          >
+            Open protocol →
+          </Link>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 function ExperimentsTab() {
   const [experiments, setExperiments] = useState<ActiveExperiment[]>([]);
   const [completed, setCompleted] = useState<CompletedExperiment[]>([]);
+  const [entriesByExp, setEntriesByExp] = useState<Record<string, JournalEntry[]>>({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -1100,28 +1468,77 @@ function ExperimentsTab() {
       fetch("/api/experiment-logs")
         .then((res) => (res.ok ? res.json() : { logs: [] }))
         .catch(() => ({ logs: [] })),
-    ]).then(([active, logsData]) => {
+    ]).then(async ([active, logsData]) => {
       setExperiments(active);
-      // Filter to completed experiments from the logs endpoint
       const completedLogs = ((logsData.logs ?? []) as ExperimentLog[])
         .filter((l) => l.status === "completed")
         .map((l) => ({
           id: l.id,
           theoryId: l.theoryId,
-          theoryTitle: "", // will be resolved below
+          theoryTitle: "",
           startedAt: l.startedAt,
           endedAt: l.endedAt,
           outcomeRating: l.outcomeRating,
         }));
       setCompleted(completedLogs);
+
+      // Fetch journal entries for every active protocol in parallel.
+      const entryResults = await Promise.all(
+        (active as ActiveExperiment[]).map(async (exp) => {
+          try {
+            const res = await fetch(`/api/journal-entries?experimentId=${exp.experimentId}`);
+            if (!res.ok) return [exp.experimentId, [] as JournalEntry[]] as const;
+            const data = (await res.json()) as JournalEntry[];
+            return [exp.experimentId, data] as const;
+          } catch {
+            return [exp.experimentId, [] as JournalEntry[]] as const;
+          }
+        })
+      );
+      const map: Record<string, JournalEntry[]> = {};
+      for (const [id, entries] of entryResults) map[id] = entries;
+      setEntriesByExp(map);
+
       setLoading(false);
     });
   }, []);
 
+  const handleToggleEntryPublic = useCallback(
+    async (experimentId: string, entryId: string, newValue: boolean) => {
+      // Optimistic update
+      setEntriesByExp((prev) => {
+        const next = { ...prev };
+        next[experimentId] = (next[experimentId] ?? []).map((e) =>
+          e.id === entryId ? { ...e, isPublic: newValue } : e
+        );
+        return next;
+      });
+
+      try {
+        const res = await fetch(`/api/journal-entries/${entryId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ isPublic: newValue }),
+        });
+        if (!res.ok) throw new Error("patch failed");
+      } catch {
+        // Roll back on error
+        setEntriesByExp((prev) => {
+          const next = { ...prev };
+          next[experimentId] = (next[experimentId] ?? []).map((e) =>
+            e.id === entryId ? { ...e, isPublic: !newValue } : e
+          );
+          return next;
+        });
+      }
+    },
+    []
+  );
+
   if (loading) {
     return (
       <div className="py-8 text-center">
-        <p className="text-sm text-muted-foreground animate-pulse">Loading experiments…</p>
+        <p className="text-sm text-muted-foreground animate-pulse">Loading protocols…</p>
       </div>
     );
   }
@@ -1129,86 +1546,28 @@ function ExperimentsTab() {
   if (experiments.length === 0 && completed.length === 0) {
     return (
       <div className="py-12 text-center space-y-2">
-        <p className="text-muted-foreground">No experiments yet.</p>
+        <p className="text-muted-foreground">No protocols yet.</p>
         <p className="text-xs text-muted-foreground leading-relaxed max-w-xs mx-auto">
           Head to the <Link href="/community" className="text-primary font-medium hover:opacity-80">Community</Link> page
-          and click <span className="text-foreground font-medium">Start Experiment</span> on any theory.
+          and click <span className="text-foreground font-medium">Start Protocol</span> on any theory.
         </p>
       </div>
     );
   }
-
-  const today = todayStr();
 
   return (
     <div className="space-y-4">
       {experiments.length > 0 && (
         <div className="space-y-3">
           <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Active</h3>
-          {experiments.map((exp) => {
-            const daysElapsed = daysBetween(exp.startedAt, today);
-            const progress = Math.min(100, Math.round((daysElapsed / exp.expectedDurationDays) * 100));
-            const daysSinceCheckin = exp.lastCheckinDate ? daysBetween(exp.lastCheckinDate, today) : null;
-
-            return (
-              <Link key={exp.experimentId} href={`/experiment/${exp.experimentId}`}>
-                <Card className="hover:bg-card/80 transition-colors cursor-pointer">
-                  <CardContent className="p-5">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex-1 min-w-0">
-                        <h3 className="font-semibold text-foreground text-sm leading-normal truncate">
-                          {exp.theoryTitle}
-                        </h3>
-                        {exp.primaryMetric && (
-                          <p className="text-xs text-muted-foreground mt-0.5 italic truncate">
-                            {exp.primaryMetric}
-                          </p>
-                        )}
-                      </div>
-                      <Badge variant="default" className="text-[10px] shrink-0">Active</Badge>
-                    </div>
-
-                    {/* Progress bar */}
-                    <div className="mt-3">
-                      <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
-                        <span className="font-mono">Day {daysElapsed + 1} / {exp.expectedDurationDays}</span>
-                        <span className="font-mono">{progress}%</span>
-                      </div>
-                      <div className="h-1.5 bg-border rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-primary rounded-full transition-all"
-                          style={{ width: `${progress}%` }}
-                        />
-                      </div>
-                    </div>
-
-                    {/* Last check-in info + adherence */}
-                    <div className="mt-2 flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
-                      <span className="font-mono">Started {exp.startedAt}</span>
-                      {daysSinceCheckin !== null ? (
-                        <span className={cn(
-                          "font-mono",
-                          daysSinceCheckin > 7 ? "text-amber-500" : ""
-                        )}>
-                          Last check-in {daysSinceCheckin === 0 ? "today" : `${daysSinceCheckin}d ago`}
-                        </span>
-                      ) : (
-                        <span className="text-amber-500 font-mono">No check-ins yet</span>
-                      )}
-                      {exp.adherencePercent !== null && (
-                        <span className={cn(
-                          "font-mono",
-                          exp.adherencePercent >= 80 ? "text-emerald-500" : exp.adherencePercent >= 50 ? "text-amber-500" : "text-rose-500"
-                        )}>
-                          {exp.adherencePercent}% adherence
-                        </span>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
-              </Link>
-            );
-          })}
+          {experiments.map((exp) => (
+            <ProtocolCard
+              key={exp.experimentId}
+              exp={exp}
+              entries={entriesByExp[exp.experimentId] ?? []}
+              onToggleEntryPublic={handleToggleEntryPublic}
+            />
+          ))}
         </div>
       )}
 
@@ -1222,7 +1581,7 @@ function ExperimentsTab() {
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
                       <h3 className="font-semibold text-foreground text-sm leading-normal truncate">
-                        {exp.theoryTitle || "Experiment"}
+                        {exp.theoryTitle || "Protocol"}
                       </h3>
                     </div>
                     <Badge variant="secondary" className="text-[10px] shrink-0">Completed</Badge>
@@ -1244,7 +1603,7 @@ function ExperimentsTab() {
       {experiments.length === 0 && completed.length > 0 && (
         <div className="pt-2 text-center">
           <p className="text-xs text-muted-foreground leading-relaxed max-w-xs mx-auto">
-            No active experiments right now.{" "}
+            No active protocols right now.{" "}
             <Link href="/community" className="text-primary font-medium hover:opacity-80">Start a new one</Link>
           </p>
         </div>
@@ -1639,7 +1998,7 @@ function PublishedTheoryCard({
             <span className="font-medium text-foreground">{saveCount}</span> saved
           </span>
           <span className="text-xs text-muted-foreground font-mono">
-            <span className="font-medium text-foreground">{logCount}</span> {logCount === 1 ? "experiment" : "experiments"}
+            <span className="font-medium text-foreground">{logCount}</span> {logCount === 1 ? "protocol" : "protocols"}
             {logCount > 0 && <span> · {avgOutcome}/10 avg</span>}
           </span>
           <span className="text-xs text-muted-foreground font-mono">Risk {block.riskLevel}</span>
@@ -1690,7 +2049,7 @@ function PublishedTheoryCard({
             ) : (
               <Button variant="default" size="sm" className="h-7 text-xs px-3"
                 onClick={() => onStartExperiment(block)}>
-                Start Experiment
+                Start Protocol
               </Button>
             )}
             <Link href={`/log/${block.id}`}>
@@ -1922,7 +2281,9 @@ function PublishedTab({
 
 export default function ProfilePage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user, isLoading } = useAuth();
+  const [upgradeSuccess, setUpgradeSuccess] = useState(false);
   const { savedIds } = useSavedTheories();
   const { logs, deleteLog, togglePublic } = useExperimentLogs();
   const [savedBlocks, setSavedBlocks] = useState<TheoryBlock[]>([]);
@@ -1930,10 +2291,21 @@ export default function ProfilePage() {
   const [activeExperiments, setActiveExperiments] = useState<ActiveExperiment[]>([]);
   const [setupTheory, setSetupTheory] = useState<TheoryBlock | null>(null);
   const [loginModalOpen, setLoginModalOpen] = useState(false);
+  const [profile, setProfile] = useState<{ is_pro: boolean; theory_generations_this_month: number; generation_month: string | null } | null>(null);
+  const [upgrading, setUpgrading] = useState(false);
+  const [managingBilling, setManagingBilling] = useState(false);
 
   useEffect(() => {
     if (!isLoading && !user) router.replace("/community");
   }, [user, isLoading, router]);
+
+  useEffect(() => {
+    if (searchParams.get("upgraded") === "true") {
+      setUpgradeSuccess(true);
+      router.replace("/profile", { scroll: false });
+      setTimeout(() => setUpgradeSuccess(false), 5000);
+    }
+  }, [searchParams, router]);
 
   useEffect(() => {
     if (savedIds.length === 0) { setSavedBlocks([]); return; }
@@ -1986,6 +2358,33 @@ export default function ProfilePage() {
       .catch(() => setActiveExperiments([]));
   }, [user]);
 
+  // Fetch profile for subscription status
+  useEffect(() => {
+    if (!user) return;
+    fetch("/api/profile")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => { if (data) setProfile(data); })
+      .catch(() => {});
+  }, [user]);
+
+  async function handleUpgrade() {
+    setUpgrading(true);
+    try {
+      const res = await fetch("/api/stripe/checkout", { method: "POST" });
+      const data = await res.json();
+      if (data.url) window.location.href = data.url;
+    } catch { /* ignore */ } finally { setUpgrading(false); }
+  }
+
+  async function handleManageBilling() {
+    setManagingBilling(true);
+    try {
+      const res = await fetch("/api/stripe/portal", { method: "POST" });
+      const data = await res.json();
+      if (data.url) window.location.href = data.url;
+    } catch { /* ignore */ } finally { setManagingBilling(false); }
+  }
+
   const activeExpByTheory = useMemo(() => {
     const map = new Map<string, string>();
     for (const exp of activeExperiments) {
@@ -2002,14 +2401,85 @@ export default function ProfilePage() {
     );
   }
 
+  const currentMonth = new Date().toISOString().slice(0, 7);
+  const generationsUsed =
+    profile?.generation_month === currentMonth
+      ? (profile?.theory_generations_this_month ?? 0)
+      : 0;
+
   return (
     <div>
       <h1 className="text-xl font-semibold text-foreground mb-6">Profile</h1>
 
+      {upgradeSuccess && (
+        <div className="mb-4 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-600 dark:text-emerald-400">
+          ✓ Welcome to Praxis Pro! Unlimited generations are now unlocked.
+        </div>
+      )}
+
+      {/* ── Subscription card ── */}
+      {profile && (
+        <div className={cn(
+          "rounded-xl border p-4 mb-6 flex items-center justify-between gap-4",
+          profile.is_pro
+            ? "border-amber-500/30 bg-amber-500/5"
+            : "border-border bg-muted/30"
+        )}>
+          <div className="flex-1 min-w-0">
+            {profile.is_pro ? (
+              <>
+                <p className="text-sm font-semibold text-amber-500 flex items-center gap-1.5">
+                  ✦ Praxis Pro
+                </p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Unlimited theory generations · Full community analytics
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-sm font-semibold text-foreground">Free Plan</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {generationsUsed}/10 theory generations used this month
+                </p>
+                <div className="mt-2 h-1.5 w-full max-w-[180px] rounded-full bg-border overflow-hidden">
+                  <div
+                    className={cn(
+                      "h-full rounded-full transition-all",
+                      generationsUsed >= 10 ? "bg-rose-500" : "bg-emerald-500"
+                    )}
+                    style={{ width: `${Math.min(100, (generationsUsed / 10) * 100)}%` }}
+                  />
+                </div>
+              </>
+            )}
+          </div>
+          {profile.is_pro ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleManageBilling}
+              disabled={managingBilling}
+              className="shrink-0 text-xs"
+            >
+              {managingBilling ? "Loading…" : "Manage Billing"}
+            </Button>
+          ) : (
+            <Button
+              size="sm"
+              onClick={handleUpgrade}
+              disabled={upgrading}
+              className="shrink-0 bg-amber-500 hover:bg-amber-400 text-white text-xs"
+            >
+              {upgrading ? "Loading…" : "Upgrade to Pro"}
+            </Button>
+          )}
+        </div>
+      )}
+
       <Tabs defaultValue="habits">
         <TabsList className="mb-2">
           <TabsTrigger value="habits">Habits</TabsTrigger>
-          <TabsTrigger value="experiments">Experiments</TabsTrigger>
+          <TabsTrigger value="experiments">Protocols</TabsTrigger>
           <TabsTrigger value="published">Created</TabsTrigger>
           <TabsTrigger value="library">Library</TabsTrigger>
         </TabsList>
@@ -2057,10 +2527,10 @@ export default function ProfilePage() {
 
           <section>
             <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
-              My Experiments
+              My Protocols
             </h2>
             {theoryIds.length === 0 ? (
-              <p className="text-muted-foreground text-sm py-4">No experiments yet.</p>
+              <p className="text-muted-foreground text-sm py-4">No protocols yet.</p>
             ) : (
               <div className="space-y-4">
                 {theoryIds.map((theoryId) => (
@@ -2098,6 +2568,8 @@ export default function ProfilePage() {
             theoryId: setupTheory.id,
             title: setupTheory.title,
             evidenceTier: setupTheory.evidenceTier,
+            goalCategory: setupTheory.goalCategory,
+            actionSteps: setupTheory.actionSteps ?? [],
             interventions: setupTheory.interventions.map((iv) => ({ name: iv.name })),
           }}
         />

@@ -346,7 +346,7 @@ function CompleteModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
       <Card className="w-full max-w-md mx-4" onClick={(e) => e.stopPropagation()}>
         <CardHeader className="p-5 pb-3">
-          <h3 className="font-semibold text-foreground">Wrap up experiment</h3>
+          <h3 className="font-semibold text-foreground">Wrap up protocol</h3>
           <p className="text-xs text-muted-foreground mt-0.5">Rate your overall outcome and optionally share with the community.</p>
         </CardHeader>
         <CardContent className="p-5 pt-0 space-y-4">
@@ -371,7 +371,7 @@ function CompleteModal({
             </div>
           </div>
           <div className="flex gap-2 pt-1">
-            <Button size="sm" onClick={handleSave} disabled={saving}>{saving ? "Saving…" : "Complete Experiment"}</Button>
+            <Button size="sm" onClick={handleSave} disabled={saving}>{saving ? "Saving…" : "Complete Protocol"}</Button>
             <Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button>
           </div>
         </CardContent>
@@ -504,7 +504,7 @@ export default function ExperimentPage() {
   if (authLoading || loading) {
     return (
       <div className="py-8">
-        <p className="text-sm text-muted-foreground animate-pulse">Loading experiment…</p>
+        <p className="text-sm text-muted-foreground animate-pulse">Loading protocol…</p>
       </div>
     );
   }
@@ -512,7 +512,7 @@ export default function ExperimentPage() {
   if (!experiment) {
     return (
       <div className="py-12 text-center space-y-2">
-        <p className="text-muted-foreground">Experiment not found.</p>
+        <p className="text-muted-foreground">Protocol not found.</p>
         <Link href="/profile" className="text-primary text-sm inline-block">← Back to profile</Link>
       </div>
     );
@@ -664,7 +664,7 @@ export default function ExperimentPage() {
               {showNewEntry ? "Cancel" : "+ Add Check-in"}
             </Button>
             <Button variant="outline" size="sm" onClick={() => setShowCompleteModal(true)}>
-              Complete Experiment
+              Complete Protocol
             </Button>
           </>
         )}
