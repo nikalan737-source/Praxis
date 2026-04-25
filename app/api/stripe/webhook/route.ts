@@ -30,8 +30,10 @@ export async function POST(request: NextRequest) {
     switch (event.type) {
       case "checkout.session.completed": {
         const session = event.data.object as Stripe.Checkout.Session;
-        const userId = session.subscription_data?.metadata?.supabase_user_id
-          ?? (session as any).metadata?.supabase_user_id;
+        const userId = (session as any).metadata?.supabase_user_id
+          ?? (session.subscription
+            ? (await stripe.subscriptions.retrieve(session.subscription as string)).metadata?.supabase_user_id
+            : null);
 
         if (!userId || !session.subscription) break;
 

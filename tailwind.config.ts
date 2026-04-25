@@ -7,6 +7,11 @@ const config: Config = {
     "./app/**/*.{js,ts,jsx,tsx,mdx}",
   ],
   theme: {
+    container: {
+      center: true,
+      padding: "2rem",
+      screens: { "2xl": "1400px" },
+    },
     fontFamily: {
       sans:    ['"Plus Jakarta Sans"', 'system-ui', 'sans-serif'],
       display: ['"Gloock"', 'Georgia', 'serif'],
@@ -52,6 +57,26 @@ const config: Config = {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
+      },
+      backgroundImage: {
+        "hero-glow":   "var(--gradient-glow)",
+      },
+      boxShadow: {
+        glow:          "var(--shadow-glow)",
+      },
+      keyframes: {
+        "fade-up": {
+          from: { opacity: "0", transform: "translateY(12px)" },
+          to:   { opacity: "1", transform: "translateY(0)" },
+        },
+        "glow-pulse": {
+          "0%, 100%": { boxShadow: "0 0 0 0 hsl(var(--primary) / 0.45)" },
+          "50%":      { boxShadow: "0 0 30px 6px hsl(var(--primary) / 0.35)" },
+        },
+      },
+      animation: {
+        "fade-up":    "fade-up 0.6s ease-out both",
+        "glow-pulse": "glow-pulse 2.8s ease-in-out infinite",
       },
     },
   },
