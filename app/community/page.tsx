@@ -10,6 +10,7 @@ import { useTheoryCounts } from "@/hooks/useTheoryCounts";
 import { SaveButton } from "@/components/SaveButton";
 import { UpvoteButton } from "@/components/UpvoteButton";
 import { LoginModal } from "@/components/LoginModal";
+import { SignInPrompt } from "@/components/SignInPrompt";
 import { ExperimentSetupModal } from "@/components/ExperimentSetupModal";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -59,14 +60,14 @@ function groupInterventionsByTier(interventions: TheoryBlock["interventions"]) {
 
 // ── Comment ──────────────────────────────────────────────────────────────────
 
-function CommentItem({ comment, onLoginRequest }: { comment: LogComment; onLoginRequest: () => void }) {
+function CommentItem({ comment, onLoginRequest }: { comment: LogComment; onLoginRequest: (message: string) => void }) {
   const { user } = useAuth();
   const [count, setCount] = useState(comment.endorsementCount);
   const [endorsed, setEndorsed] = useState(comment.userEndorsed);
   const [loading, setLoading] = useState(false);
 
   async function toggle() {
-    if (!user) { onLoginRequest(); return; }
+    if (!user) { onLoginRequest("Sign in to endorse comments"); return; }
     if (loading) return;
     setLoading(true);
     const res = await fetch("/api/comment-endorsements", {
@@ -102,7 +103,7 @@ function CommentItem({ comment, onLoginRequest }: { comment: LogComment; onLogin
 
 // ── Log entry ─────────────────────────────────────────────────────────────────
 
-function LogEntry({ log, onLoginRequest }: { log: PublicLog; onLoginRequest: () => void }) {
+function LogEntry({ log, onLoginRequest }: { log: PublicLog; onLoginRequest: (message: string) => void }) {
   const { user } = useAuth();
   const [endorseCount, setEndorseCount] = useState(log.endorsementCount);
   const [endorsed, setEndorsed] = useState(log.userEndorsed);
@@ -115,7 +116,7 @@ function LogEntry({ log, onLoginRequest }: { log: PublicLog; onLoginRequest: () 
   const [expanded, setExpanded] = useState(false);
 
   async function toggleEndorse() {
-    if (!user) { onLoginRequest(); return; }
+    if (!user) { onLoginRequest("Sign in to endorse logs"); return; }
     if (endorseLoading) return;
     setEndorseLoading(true);
     const res = await fetch("/api/log-endorsements", {
@@ -141,7 +142,7 @@ function LogEntry({ log, onLoginRequest }: { log: PublicLog; onLoginRequest: () 
 
   async function submitComment(e: React.FormEvent) {
     e.preventDefault();
-    if (!user) { onLoginRequest(); return; }
+    if (!user) { onLoginRequest("Sign in to comment"); return; }
     if (!commentText.trim() || posting) return;
     setPosting(true);
     const res = await fetch("/api/log-comments", {
@@ -252,7 +253,7 @@ function LogEntry({ log, onLoginRequest }: { log: PublicLog; onLoginRequest: () 
 
 // ── Logs panel ────────────────────────────────────────────────────────────────
 
-function LogsPanel({ theoryId, onLoginRequest }: { theoryId: string; onLoginRequest: () => void }) {
+function LogsPanel({ theoryId, onLoginRequest }: { theoryId: string; onLoginRequest: (message: string) => void }) {
   const [logs, setLogs] = useState<PublicLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [offset, setOffset] = useState(0);
@@ -308,7 +309,8 @@ function TheoryCard({
   onToggleSave: (id: string) => Promise<{ requiresAuth?: boolean } | undefined | void>;
   saveCount: number; upvoteCount: number; isUpvoted: boolean;
   onToggleUpvote: (theoryId: string) => Promise<{ requiresAuth?: boolean } | undefined | void>;
-  upvoteLoading: boolean; logCount: number; avgOutcome: number; onLoginRequest: () => void;
+  upvoteLoading: boolean; logCount: number; avgOutcome: number;
+  onLoginRequest: (message: string) => void;
   onStartExperiment: (block: TheoryBlock) => void;
 }) {
   const [expandedPanel, setExpandedPanel] = useState<"theory" | "logs" | null>(null);
@@ -360,9 +362,9 @@ function TheoryCard({
             <p className="text-sm text-muted-foreground mt-1.5 leading-relaxed">{block.goalStatement}</p>
           </div>
           <div className="flex items-center gap-1 shrink-0">
-            <SaveButton id={block.id} isSaved={isSaved} onToggle={onToggleSave} onLoginRequest={onLoginRequest} />
+            <SaveButton id={block.id} isSaved={isSaved} onToggle={onToggleSave} onLoginRequest={() => onLoginRequest("Sign in to save theories")} />
             <UpvoteButton theoryId={block.id} count={upvoteCount} isUpvoted={isUpvoted}
-              onToggle={onToggleUpvote} isLoading={upvoteLoading} onLoginRequest={onLoginRequest} />
+              onToggle={onToggleUpvote} isLoading={upvoteLoading} onLoginRequest={() => onLoginRequest("Sign in to upvote theories")} />
           </div>
         </div>
       </CardHeader>
@@ -554,12 +556,13 @@ export default function CommunityPage() {
   const [goalCategory, setGoalCategory] = useState("");
   const [sortMode, setSortMode] = useState<SortMode>("popular");
   const [loginModalOpen, setLoginModalOpen] = useState(false);
+  const [signInPrompt, setSignInPrompt] = useState<string | null>(null);
   const [experimentTheory, setExperimentTheory] = useState<TheoryBlock | null>(null);
   const { user } = useAuth();
   const { isSaved, toggleSave } = useSavedTheories();
 
   function handleStartExperiment(block: TheoryBlock) {
-    if (!user) { setLoginModalOpen(true); return; }
+    if (!user) { setSignInPrompt("Sign in to start a protocol"); return; }
     setExperimentTheory(block);
   }
 
@@ -703,13 +706,24 @@ export default function CommunityPage() {
               upvoteLoading={upvoteLoading[block.id] ?? false}
               logCount={counts[block.id]?.logCount ?? 0}
               avgOutcome={counts[block.id]?.avgOutcome ?? 0}
-              onLoginRequest={() => setLoginModalOpen(true)}
+              onLoginRequest={(message) => setSignInPrompt(message)}
               onStartExperiment={handleStartExperiment}
             />
           ))}
         </div>
       )}
       <LoginModal isOpen={loginModalOpen} onClose={() => setLoginModalOpen(false)} />
+      {signInPrompt && (
+        <SignInPrompt
+          key={signInPrompt}
+          message={signInPrompt}
+          onSignIn={() => {
+            setSignInPrompt(null);
+            setLoginModalOpen(true);
+          }}
+          onDismiss={() => setSignInPrompt(null)}
+        />
+      )}
       {experimentTheory && (
         <ExperimentSetupModal
           isOpen={true}

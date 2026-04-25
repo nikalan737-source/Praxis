@@ -6,6 +6,7 @@ import { useSearchParams } from "next/navigation";
 import type { TheoryBlock, PubMedArticle, GenerateResult, EvaluateResult } from "@/types/theory-block";
 import { useAuth } from "@/contexts/AuthContext";
 import { LoginModal } from "@/components/LoginModal";
+import { SignInPrompt } from "@/components/SignInPrompt";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -318,6 +319,9 @@ function CreatePageContent() {
   const { user } = useAuth();
   const [loginModalOpen, setLoginModalOpen] = useState(false);
   const [loginRedirect, setLoginRedirect] = useState<string | undefined>();
+  const [signInPrompt, setSignInPrompt] = useState<string | null>(null);
+
+  const PUBLISH_PROMPT = "Sign in to publish to the community";
 
   // ── AI Generate state ──
   const [aiGoal, setAiGoal] = useState("");
@@ -460,7 +464,7 @@ function CreatePageContent() {
           mode: "ai", aiResult, selectedIds: blocks.map((b) => b.id),
         }));
         setLoginRedirect("/create?publish=1");
-        setLoginModalOpen(true);
+        setSignInPrompt(PUBLISH_PROMPT);
         setPublishingAll(false);
         return;
       }
@@ -482,7 +486,7 @@ function CreatePageContent() {
         mode: "ai", aiResult, selectedIds: Array.from(selectedIds),
       }));
       setLoginRedirect("/create?publish=1");
-      setLoginModalOpen(true);
+      setSignInPrompt(PUBLISH_PROMPT);
       return;
     }
     void doPublishAiBlocks(blocks);
@@ -527,7 +531,7 @@ function CreatePageContent() {
       if (res.status === 401) {
         sessionStorage.setItem(UNPUBLISHED_STORAGE_KEY, JSON.stringify({ mode: "own", ownResult }));
         setLoginRedirect("/create?publish=1");
-        setLoginModalOpen(true);
+        setSignInPrompt(PUBLISH_PROMPT);
       } else {
         const data = await res.json();
         setOwnError(data.error || "Publish failed");
@@ -552,7 +556,7 @@ function CreatePageContent() {
       if (res.status === 401) {
         sessionStorage.setItem(UNPUBLISHED_STORAGE_KEY, JSON.stringify({ mode: "own", ownResult }));
         setLoginRedirect("/create?publish=1");
-        setLoginModalOpen(true);
+        setSignInPrompt(PUBLISH_PROMPT);
       } else {
         const data = await res.json();
         setOwnError(data.error || "Publish failed");
@@ -568,7 +572,7 @@ function CreatePageContent() {
     if (!user) {
       sessionStorage.setItem(UNPUBLISHED_STORAGE_KEY, JSON.stringify({ mode: "own", ownResult }));
       setLoginRedirect("/create?publish=1");
-      setLoginModalOpen(true);
+      setSignInPrompt(PUBLISH_PROMPT);
       return;
     }
     void doPublishOwn();
@@ -578,7 +582,7 @@ function CreatePageContent() {
     if (!user) {
       sessionStorage.setItem(UNPUBLISHED_STORAGE_KEY, JSON.stringify({ mode: "own", ownResult }));
       setLoginRedirect("/create?publish=1");
-      setLoginModalOpen(true);
+      setSignInPrompt(PUBLISH_PROMPT);
       return;
     }
     void doPublishOwnBlock(block);
@@ -619,7 +623,7 @@ function CreatePageContent() {
       if (res.status === 401) {
         sessionStorage.setItem(UNPUBLISHED_STORAGE_KEY, JSON.stringify({ mode: "own", ownResult }));
         setLoginRedirect("/create?publish=1");
-        setLoginModalOpen(true);
+        setSignInPrompt(PUBLISH_PROMPT);
         setOwnPublishingAll(false);
         return;
       }
@@ -637,7 +641,7 @@ function CreatePageContent() {
     if (!user) {
       sessionStorage.setItem(UNPUBLISHED_STORAGE_KEY, JSON.stringify({ mode: "own", ownResult }));
       setLoginRedirect("/create?publish=1");
-      setLoginModalOpen(true);
+      setSignInPrompt(PUBLISH_PROMPT);
       return;
     }
     void doPublishOwnSelected();
@@ -935,6 +939,17 @@ function CreatePageContent() {
         onClose={() => { setLoginModalOpen(false); setLoginRedirect(undefined); }}
         redirectAfterLogin={loginRedirect}
       />
+      {signInPrompt && (
+        <SignInPrompt
+          key={signInPrompt}
+          message={signInPrompt}
+          onSignIn={() => {
+            setSignInPrompt(null);
+            setLoginModalOpen(true);
+          }}
+          onDismiss={() => setSignInPrompt(null)}
+        />
+      )}
     </div>
   );
 }

@@ -2409,7 +2409,14 @@ function ProfilePageInner() {
 
   return (
     <div>
-      <h1 className="text-xl font-semibold text-foreground mb-6">Profile</h1>
+      <div className="flex items-center gap-2 mb-6">
+        <h1 className="text-xl font-semibold text-foreground">Profile</h1>
+        {profile?.is_pro && (
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-primary/15 text-primary ring-1 ring-primary/20">
+            ✦ Pro
+          </span>
+        )}
+      </div>
 
       {upgradeSuccess && (
         <div className="mb-4 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-600 dark:text-emerald-400">
