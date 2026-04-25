@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 
+export const dynamic = "force-dynamic";
+
 // DELETE /api/habits/[id] — soft-delete (set is_active = false)
 export async function DELETE(
   _request: NextRequest,

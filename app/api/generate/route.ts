@@ -5,6 +5,8 @@ import type { PubMedArticle } from "@/types/theory-block";
 import { createClient } from "@/lib/supabase/server";
 import { FREE_TIER_MONTHLY_GENERATIONS } from "@/lib/stripe";
 
+export const dynamic = "force-dynamic";
+
 const openai = () => {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error("OPENAI_API_KEY_MISSING");

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 
+export const dynamic = "force-dynamic";
+
 // PATCH /api/theories/[id]/visibility — toggle is_public for a theory the user owns
 export async function PATCH(
   request: NextRequest,

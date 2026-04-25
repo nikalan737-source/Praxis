@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 
+export const dynamic = "force-dynamic";
+
 // PATCH /api/journal-entries/[id]
 // Body: { isPublic?: boolean, rating?: number, notes?: string, sideEffects?: string }
 export async function PATCH(

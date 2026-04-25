@@ -3,6 +3,8 @@ import { createClient } from "@/lib/supabase/server";
 import { TheoryBlockSchema } from "@/lib/theory-block-schema";
 import type { z } from "zod";
 
+export const dynamic = "force-dynamic";
+
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient();

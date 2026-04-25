@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 
+export const dynamic = "force-dynamic";
+
 // POST /api/journal-photos — upload a photo to the private journal-photos bucket
 export async function POST(request: NextRequest) {
   try {

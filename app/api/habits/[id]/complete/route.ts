@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 
+export const dynamic = "force-dynamic";
+
 // POST /api/habits/[id]/complete — mark a habit complete for a given date
 export async function POST(
   request: NextRequest,

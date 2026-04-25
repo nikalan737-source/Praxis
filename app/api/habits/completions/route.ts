@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 
+export const dynamic = "force-dynamic";
+
 // GET /api/habits/completions?from=YYYY-MM-DD&to=YYYY-MM-DD
 // Returns all completions for the user across all habits in the date range
 export async function GET(request: NextRequest) {
