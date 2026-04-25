@@ -41,15 +41,17 @@ export async function POST(request: NextRequest) {
           session.subscription as string
         );
 
+        const periodEnd =
+          (subscription as any).items?.data?.[0]?.current_period_end ??
+          (subscription as any).current_period_end;
+
         await supabaseAdmin
           .from("profiles")
           .update({
             is_pro: true,
             stripe_subscription_id: subscription.id,
             stripe_subscription_status: subscription.status,
-            pro_expires_at: new Date(
-              subscription.current_period_end * 1000
-            ).toISOString(),
+            pro_expires_at: new Date(periodEnd * 1000).toISOString(),
             updated_at: new Date().toISOString(),
           })
           .eq("id", userId);
@@ -66,15 +68,16 @@ export async function POST(request: NextRequest) {
         if (!userId) break;
 
         const isActive = ["active", "trialing"].includes(subscription.status);
+        const periodEnd =
+          (subscription as any).items?.data?.[0]?.current_period_end ??
+          (subscription as any).current_period_end;
 
         await supabaseAdmin
           .from("profiles")
           .update({
             is_pro: isActive,
             stripe_subscription_status: subscription.status,
-            pro_expires_at: new Date(
-              subscription.current_period_end * 1000
-            ).toISOString(),
+            pro_expires_at: new Date(periodEnd * 1000).toISOString(),
             updated_at: new Date().toISOString(),
           })
           .eq("id", userId);
