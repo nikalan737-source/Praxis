@@ -679,9 +679,11 @@ function CreatePageContent() {
             </Button>
           </form>
 
+          {aiLoading && <GeneratingSkeleton messages={AI_GENERATING_MESSAGES} />}
+
           {aiError && <p className="mt-4 text-sm text-destructive">{aiError}</p>}
 
-          {aiResult && (
+          {!aiLoading && aiResult && (
             <div className="mt-8">
               {aiResult.articles.length > 0 && (
                 <div className="mb-4 p-3 bg-primary/8 border border-primary/20 rounded-lg space-y-1">
@@ -785,7 +787,11 @@ function CreatePageContent() {
                 {ownLoading ? "Cross-referencing with research…" : "Evaluate my theory →"}
               </Button>
             </form>
-          ) : (
+          ) : null}
+          {!ownResult && ownLoading && (
+            <GeneratingSkeleton messages={OWN_GENERATING_MESSAGES} />
+          )}
+          {ownResult && !ownLoading && (
             <div className="space-y-4">
               <Card className="border-border/60">
                 <CardContent className="p-4">
@@ -929,6 +935,59 @@ function CreatePageContent() {
         onClose={() => { setLoginModalOpen(false); setLoginRedirect(undefined); }}
         redirectAfterLogin={loginRedirect}
       />
+    </div>
+  );
+}
+
+const AI_GENERATING_MESSAGES = [
+  "Searching PubMed for relevant studies…",
+  "Extracting mechanisms from research…",
+  "Building theory blocks…",
+  "Cross-referencing evidence tiers…",
+  "Almost there…",
+];
+
+const OWN_GENERATING_MESSAGES = [
+  "Reading your theory…",
+  "Searching PubMed for matches…",
+  "Evaluating evidence strength…",
+  "Structuring your theory blocks…",
+  "Almost there…",
+];
+
+function GeneratingLabel({ messages }: { messages: string[] }) {
+  const [idx, setIdx] = useState(0);
+  useEffect(() => {
+    setIdx(0);
+    const id = setInterval(() => {
+      setIdx((i) => (i + 1) % messages.length);
+    }, 2500);
+    return () => clearInterval(id);
+  }, [messages]);
+  return <span className="text-sm text-primary font-medium">{messages[idx]}</span>;
+}
+
+function GeneratingSkeleton({ messages }: { messages: string[] }) {
+  return (
+    <div className="mt-8 space-y-4">
+      <div className="flex items-center gap-3 p-4 bg-primary/8 border border-primary/20 rounded-xl">
+        <svg className="animate-spin h-4 w-4 text-primary shrink-0" viewBox="0 0 24 24" fill="none">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+        </svg>
+        <GeneratingLabel messages={messages} />
+      </div>
+      {[1, 2, 3].map((i) => (
+        <div key={i} className="rounded-xl border border-border p-5 space-y-3 animate-pulse">
+          <div className="flex gap-2">
+            <div className="h-4 w-16 bg-muted rounded-full" />
+            <div className="h-4 w-24 bg-muted rounded-full" />
+          </div>
+          <div className="h-4 w-3/4 bg-muted rounded" />
+          <div className="h-3 w-full bg-muted rounded" />
+          <div className="h-3 w-5/6 bg-muted rounded" />
+        </div>
+      ))}
     </div>
   );
 }
