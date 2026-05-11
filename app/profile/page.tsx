@@ -28,7 +28,8 @@ import { ExperimentSetupModal } from "@/components/ExperimentSetupModal";
 import { HealthProfileOnboarding } from "@/components/HealthProfileOnboarding";
 import { HealthTagsManageModal } from "@/components/HealthTagsManageModal";
 import { cn } from "@/lib/utils";
-import { X } from "lucide-react";
+import { Lock, X } from "lucide-react";
+import { FREE_HEALTH_TAGS_MAX } from "@/lib/health-tags-limits";
 
 // ── Shared helpers ─────────────────────────────────────────────────────────────
 
@@ -2438,6 +2439,9 @@ function ProfilePageInner() {
       ? (profile?.theory_generations_this_month ?? 0)
       : 0;
 
+  const healthTagsAtFreeLimit =
+    !!profile && !profile.is_pro && (profile.health_tags?.length ?? 0) >= FREE_HEALTH_TAGS_MAX;
+
   return (
     <div>
       <div className="flex items-center gap-2 mb-6">
@@ -2530,8 +2534,12 @@ function ProfilePageInner() {
               type="button"
               variant="outline"
               size="sm"
-              className="shrink-0 border-primary/30 text-primary hover:bg-primary/10"
-              onClick={() => setHealthTagsModalOpen(true)}
+              className="shrink-0 border-primary/30 text-primary hover:bg-primary/10 disabled:opacity-50"
+              disabled={healthTagsAtFreeLimit}
+              onClick={() => {
+                if (healthTagsAtFreeLimit) return;
+                setHealthTagsModalOpen(true);
+              }}
             >
               + Add more
             </Button>
@@ -2558,6 +2566,23 @@ function ProfilePageInner() {
                 </li>
               ))}
             </ul>
+          )}
+          {healthTagsAtFreeLimit && (
+            <div className="mt-4 flex flex-col sm:flex-row sm:items-center gap-2 rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2.5 text-sm text-foreground/90">
+              <span className="inline-flex items-center gap-2 font-medium text-amber-800 dark:text-amber-200/95">
+                <Lock className="h-4 w-4 shrink-0 opacity-80" aria-hidden />
+                Unlock unlimited health tags with Praxis Pro.
+              </span>
+              <Button
+                type="button"
+                size="sm"
+                className="sm:ml-auto shrink-0 bg-amber-500 hover:bg-amber-400 text-white h-8 text-xs"
+                onClick={() => void handleUpgrade()}
+                disabled={upgrading}
+              >
+                {upgrading ? "Loading…" : "Upgrade"}
+              </Button>
+            </div>
           )}
         </section>
       )}
@@ -2647,13 +2672,19 @@ function ProfilePageInner() {
       <LoginModal isOpen={loginModalOpen} onClose={() => setLoginModalOpen(false)} />
 
       {profile?.health_profile_onboarding_completed === false && (
-        <HealthProfileOnboarding open onFinished={() => void refreshProfile()} />
+        <HealthProfileOnboarding
+          open
+          isPro={profile.is_pro}
+          onFinished={() => void refreshProfile()}
+        />
       )}
 
       <HealthTagsManageModal
         open={healthTagsModalOpen}
         onOpenChange={setHealthTagsModalOpen}
         initialTags={profile?.health_tags ?? []}
+        isPro={profile?.is_pro ?? false}
+        onUpgrade={() => void handleUpgrade()}
         onSaved={(tags) =>
           setProfile((p) => (p ? { ...p, health_tags: tags } : p))
         }

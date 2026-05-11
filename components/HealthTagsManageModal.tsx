@@ -4,12 +4,15 @@ import { useEffect, useState } from "react";
 import { HealthTagsEditor } from "@/components/HealthTagsEditor";
 import { Button } from "@/components/ui/button";
 import { X } from "lucide-react";
+import { FREE_HEALTH_TAGS_MAX } from "@/lib/health-tags-limits";
 
 type HealthTagsManageModalProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   initialTags: string[];
   onSaved: (tags: string[]) => void;
+  isPro: boolean;
+  onUpgrade?: () => void;
 };
 
 export function HealthTagsManageModal({
@@ -17,6 +20,8 @@ export function HealthTagsManageModal({
   onOpenChange,
   initialTags,
   onSaved,
+  isPro,
+  onUpgrade,
 }: HealthTagsManageModalProps) {
   const [tags, setTags] = useState<string[]>(initialTags);
   const [busy, setBusy] = useState(false);
@@ -39,11 +44,13 @@ export function HealthTagsManageModal({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ health_tags: tags }),
       });
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
+        if (data.error === "health_tag_limit" && typeof data.message === "string") {
+          throw new Error(data.message);
+        }
         throw new Error(typeof data.error === "string" ? data.error : "Could not save");
       }
-      const data = await res.json();
       const next = Array.isArray(data.health_tags) ? data.health_tags : tags;
       onSaved(next);
       onOpenChange(false);
@@ -93,11 +100,22 @@ export function HealthTagsManageModal({
         </div>
 
         <div className="flex-1 overflow-y-auto px-5 pb-2">
-          <HealthTagsEditor selected={tags} onChange={setTags} />
+          <HealthTagsEditor
+            selected={tags}
+            onChange={setTags}
+            maxTags={isPro ? undefined : FREE_HEALTH_TAGS_MAX}
+          />
           {error && (
-            <p className="mt-3 text-sm text-destructive" role="alert">
-              {error}
-            </p>
+            <div className="mt-3 space-y-2">
+              <p className="text-sm text-destructive" role="alert">
+                {error}
+              </p>
+              {!isPro && onUpgrade && (
+                <Button type="button" size="sm" className="bg-amber-500 hover:bg-amber-400 text-white" onClick={onUpgrade}>
+                  Upgrade to Pro
+                </Button>
+              )}
+            </div>
           )}
         </div>
 

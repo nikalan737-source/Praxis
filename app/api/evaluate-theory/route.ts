@@ -3,7 +3,7 @@ import OpenAI from "openai";
 import { EvaluateMultiResultSchema } from "@/lib/theory-block-schema";
 import type { PubMedArticle } from "@/types/theory-block";
 import { createClient } from "@/lib/supabase/server";
-import { buildHealthTagsPromptSection } from "@/lib/health-profile-prompt";
+import { buildHealthProfilePrompt } from "@/lib/health-profile-prompt";
 
 const openai = () => {
   const apiKey = process.env.OPENAI_API_KEY;
@@ -139,7 +139,7 @@ function buildEvalPrompt(
     ? `\n\nRELEVANT RESEARCH (use to evaluate — don't just summarize):\n` +
       articles.map((a) => `[PMID ${a.pmid}] "${a.title}" — ${a.authors} (${a.year}, ${a.source})`).join("\n")
     : "\n\nNo directly matching PubMed articles found. Evaluate using general scientific knowledge.";
-  const healthCtx = buildHealthTagsPromptSection(healthTags);
+  const healthCtx = buildHealthProfilePrompt(healthTags);
 
   return `You are a scientific peer reviewer evaluating a user-submitted health theory. Your job is to analyze the ENTIRE theory thoroughly and SEGMENT IT into MANY separate theory blocks based on how well-supported each component is by evidence. You must cover EVERY part of the user's theory — do not skip or summarize away any section.
 ${healthCtx}

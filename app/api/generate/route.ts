@@ -4,7 +4,7 @@ import { GenerateResultSchema } from "@/lib/theory-block-schema";
 import type { PubMedArticle } from "@/types/theory-block";
 import { createClient } from "@/lib/supabase/server";
 import { FREE_TIER_MONTHLY_GENERATIONS } from "@/lib/stripe";
-import { buildHealthTagsPromptSection } from "@/lib/health-profile-prompt";
+import { buildHealthProfilePrompt } from "@/lib/health-profile-prompt";
 
 export const dynamic = "force-dynamic";
 
@@ -113,7 +113,7 @@ function buildSystemPrompt(articles: PubMedArticle[], goal: string, healthTags: 
     ? `\n\nRELEVANT RESEARCH (use these to reason from — don't just summarize them):\n` +
       articles.map((a) => `[PMID ${a.pmid}] "${a.title}" — ${a.authors} (${a.year}, ${a.source})`).join("\n")
     : "\n\nNo PubMed articles found. Reason from established physiology and biochemistry.";
-  const healthCtx = buildHealthTagsPromptSection(healthTags);
+  const healthCtx = buildHealthProfilePrompt(healthTags);
 
   return `You are a research scientist and mechanistic thinker. Your job is NOT to summarize studies — it is to reason from biology, find non-obvious connections, and generate surprising but grounded insights.
 

@@ -1,21 +1,26 @@
 /**
- * Shared personalization block for AI prompts (theory generation & evaluation).
+ * Shared personalization block for theory generation & evaluation (authenticated users).
+ * Informational only — no diagnosis or medical directives.
  */
-export function buildHealthTagsPromptSection(tags: string[]): string {
+export function buildHealthProfilePrompt(tags: string[]): string {
   const trimmed = tags.map((t) => t.trim()).filter(Boolean);
   const cleaned = Array.from(new Set(trimmed));
   if (cleaned.length === 0) return "";
 
+  const list = cleaned.map((t) => `• ${t}`).join("\n");
   return `
 
 USER HEALTH PROFILE (personalization — apply consistently across all blocks and interventions):
 The user shared these contexts or focus areas (may include custom free-text tags):
-${cleaned.map((t) => `• ${t}`).join("\n")}
+${list}
 
-Personalization rules:
-- Avoid movements, loads, or interventions that are typically contraindicated for their situation when tags imply structural, neurological, metabolic, or pregnancy/postpartum concerns (e.g., minimize heavy spinal compression or high-risk maneuvers when disc/spine injury tags appear — prefer graded, clinician-aligned alternatives and flag uncertainty).
-- Reflect hormonal and life-stage realities when tags suggest postpartum, perimenopause, or similar (nutrition, recovery pacing, symptom framing).
-- When tags suggest neurologic or mobility conditions, bias toward evidence-informed, safety-first exercise framing (e.g., cueing, balance, progression appropriate to that context).
-- Prefer tailored, specific guidance over generic defaults; when a tag is ambiguous, choose conservative options and brief caveats rather than one-size advice.
-- Never diagnose; encourage professional care for medical decisions. Stay warm, practical, and non-alarmist.`;
+Personalization rules (informational framing only — do not diagnose or prescribe medical care):
+- Contraindicated movement: When tags suggest spine/disc issues or similar, avoid recommending heavy axial loading, high-impact spinal compression, or aggressive end-range spinal flexion/extension; prefer graded, joint-sparing options and note when a clinician's input would be prudent.
+- Hormonal & life-stage context: For postpartum, perimenopause, or hormonal-change tags, reflect realistic recovery pacing, nutrition considerations, and symptom language that fits those life stages without overstating certainty.
+- Condition-appropriate exercise: For neurologic or balance-related tags (e.g. Parkinson's), favor evidence-informed, safety-first movement framing — cueing, balance, dual-task awareness, and progression appropriate to that context.
+- Conflicting or ambiguous tags: If tags pull advice in different directions, choose conservative, well-supported recommendations and briefly acknowledge tradeoffs rather than forcing a single aggressive protocol.
+- Tone: Warm, practical, non-alarmist. Never diagnose or claim certainty about the user's medical status; encourage professional guidance for medical decisions.`;
 }
+
+/** @deprecated Use buildHealthProfilePrompt — alias kept for any older imports */
+export const buildHealthTagsPromptSection = buildHealthProfilePrompt;

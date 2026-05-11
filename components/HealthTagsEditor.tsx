@@ -7,10 +7,15 @@ import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 
+const UPGRADE_COPY = "Unlock unlimited health tags with Praxis Pro.";
+
 export type HealthTagsEditorProps = {
   selected: string[];
   onChange: (tags: string[]) => void;
   className?: string;
+  /** When set, selecting beyond this many distinct tags is blocked for free users */
+  maxTags?: number;
+  onTagLimitReached?: () => void;
 };
 
 function dedupePreserveOrder(tags: string[]): string[] {
@@ -25,12 +30,20 @@ function dedupePreserveOrder(tags: string[]): string[] {
   return out;
 }
 
-export function HealthTagsEditor({ selected, onChange, className }: HealthTagsEditorProps) {
+export function HealthTagsEditor({
+  selected,
+  onChange,
+  className,
+  maxTags,
+  onTagLimitReached,
+}: HealthTagsEditorProps) {
   const [query, setQuery] = useState("");
   const [addingOwn, setAddingOwn] = useState(false);
   const [customDraft, setCustomDraft] = useState("");
+  const [showLimitHint, setShowLimitHint] = useState(false);
 
   const selectedSet = useMemo(() => new Set(selected.map((t) => t.toLowerCase())), [selected]);
+  const atLimit = maxTags !== undefined && selected.length >= maxTags;
 
   const q = query.trim().toLowerCase();
 
@@ -49,27 +62,57 @@ export function HealthTagsEditor({ selected, onChange, className }: HealthTagsEd
     return customSelected.filter((t) => t.toLowerCase().includes(q));
   }, [customSelected, q]);
 
+  function tryAdd(next: string[]): boolean {
+    const deduped = dedupePreserveOrder(next);
+    if (maxTags !== undefined && deduped.length > maxTags) {
+      setShowLimitHint(true);
+      onTagLimitReached?.();
+      return false;
+    }
+    setShowLimitHint(false);
+    onChange(deduped);
+    return true;
+  }
+
   function toggle(label: string) {
     const norm = label.trim();
     if (!norm) return;
     const key = norm.toLowerCase();
     if (selectedSet.has(key)) {
+      setShowLimitHint(false);
       onChange(selected.filter((t) => t.toLowerCase() !== key));
     } else {
-      onChange(dedupePreserveOrder([...selected, norm]));
+      tryAdd([...selected, norm]);
     }
   }
 
   function addCustom() {
     const v = customDraft.trim();
     if (!v) return;
-    onChange(dedupePreserveOrder([...selected, v]));
-    setCustomDraft("");
-    setAddingOwn(false);
+    if (tryAdd([...selected, v])) {
+      setCustomDraft("");
+      setAddingOwn(false);
+    }
   }
 
   return (
     <div className={cn("space-y-4", className)}>
+      {maxTags !== undefined && (
+        <p className="text-xs text-muted-foreground">
+          {selected.length}/{maxTags} tags selected
+          {atLimit ? " — remove one to pick another, or upgrade for unlimited." : ""}
+        </p>
+      )}
+
+      {showLimitHint && (
+        <div
+          className="rounded-xl border border-amber-500/25 bg-amber-500/10 px-3 py-2.5 text-sm text-amber-900 dark:text-amber-100/90"
+          role="status"
+        >
+          {UPGRADE_COPY}
+        </div>
+      )}
+
       <div className="relative">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
         <Input
@@ -85,14 +128,17 @@ export function HealthTagsEditor({ selected, onChange, className }: HealthTagsEd
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
         {filteredPresets.map(({ label, Icon }) => {
           const active = selectedSet.has(label.toLowerCase());
+          const disabled = !active && atLimit;
           return (
             <button
               key={label}
               type="button"
+              disabled={disabled}
               onClick={() => toggle(label)}
               className={cn(
                 "rounded-xl border text-left p-3 transition-all duration-200 flex flex-col gap-2 min-h-[92px]",
                 "hover:shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+                disabled && "opacity-50 cursor-not-allowed hover:shadow-none",
                 active
                   ? "border-primary bg-primary/12 shadow-[inset_0_1px_0_0_hsl(var(--primary)/0.12)] ring-1 ring-primary/25"
                   : "border-border bg-card/90 hover:bg-muted/40"
@@ -120,14 +166,17 @@ export function HealthTagsEditor({ selected, onChange, className }: HealthTagsEd
 
         {filteredCustoms.map((label) => {
           const active = selectedSet.has(label.toLowerCase());
+          const disabled = !active && atLimit;
           return (
             <button
               key={`custom-${label}`}
               type="button"
+              disabled={disabled}
               onClick={() => toggle(label)}
               className={cn(
                 "rounded-xl border text-left p-3 transition-all duration-200 flex flex-col gap-2 min-h-[92px]",
                 "hover:shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+                disabled && "opacity-50 cursor-not-allowed",
                 active
                   ? "border-primary bg-primary/12 ring-1 ring-primary/25"
                   : "border-dashed border-primary/30 bg-primary/[0.04]"
@@ -144,17 +193,26 @@ export function HealthTagsEditor({ selected, onChange, className }: HealthTagsEd
         {!addingOwn ? (
           <button
             type="button"
-            onClick={() => setAddingOwn(true)}
+            disabled={atLimit}
+            onClick={() => {
+              if (atLimit) {
+                setShowLimitHint(true);
+                onTagLimitReached?.();
+                return;
+              }
+              setAddingOwn(true);
+            }}
             className={cn(
               "rounded-xl border border-dashed border-border text-left p-3 transition-colors min-h-[92px]",
               "flex flex-col gap-2 justify-center items-center text-center",
-              "hover:border-primary/35 hover:bg-muted/30 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+              "hover:border-primary/35 hover:bg-muted/30 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+              atLimit && "opacity-50 cursor-not-allowed hover:border-border hover:bg-transparent"
             )}
           >
             <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-muted text-muted-foreground">
               <Plus className="h-4 w-4" />
             </span>
-            <span className="text-xs font-medium text-muted-foreground">Add your own</span>
+            <span className="text-xs font-medium text-muted-foreground">+ Add your own</span>
           </button>
         ) : (
           <div className="rounded-xl border border-primary/25 bg-muted/20 p-3 col-span-2 sm:col-span-3 flex flex-col gap-2">
@@ -188,7 +246,13 @@ export function HealthTagsEditor({ selected, onChange, className }: HealthTagsEd
               >
                 Cancel
               </Button>
-              <Button type="button" size="sm" className="text-xs bg-primary" onClick={addCustom}>
+              <Button
+                type="button"
+                size="sm"
+                className="text-xs bg-primary"
+                onClick={addCustom}
+                disabled={atLimit}
+              >
                 Add tag
               </Button>
             </div>

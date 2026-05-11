@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { FREE_HEALTH_TAGS_MAX } from "@/lib/health-tags-limits";
 
 export const dynamic = "force-dynamic";
 
@@ -88,6 +89,25 @@ export async function PATCH(request: NextRequest) {
       if (tags === null) {
         return NextResponse.json({ error: "health_tags must be an array of strings" }, { status: 400 });
       }
+
+      const { data: row } = await supabase
+        .from("profiles")
+        .select("is_pro")
+        .eq("id", user.id)
+        .single();
+
+      const isPro = row?.is_pro === true;
+      if (!isPro && tags.length > FREE_HEALTH_TAGS_MAX) {
+        return NextResponse.json(
+          {
+            error: "health_tag_limit",
+            message: "Unlock unlimited health tags with Praxis Pro.",
+            limit: FREE_HEALTH_TAGS_MAX,
+          },
+          { status: 403 }
+        );
+      }
+
       updates.health_tags = tags;
     }
 

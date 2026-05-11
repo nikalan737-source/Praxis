@@ -5,10 +5,12 @@ import { ArrowLeft, X } from "lucide-react";
 import { HealthTagsEditor } from "@/components/HealthTagsEditor";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { FREE_HEALTH_TAGS_MAX } from "@/lib/health-tags-limits";
 
 type HealthProfileOnboardingProps = {
   open: boolean;
   onFinished: () => void;
+  isPro: boolean;
 };
 
 async function saveHealthProfile(tags: string[], complete: boolean): Promise<void> {
@@ -22,11 +24,14 @@ async function saveHealthProfile(tags: string[], complete: boolean): Promise<voi
   });
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
+    if (data.error === "health_tag_limit" && typeof data.message === "string") {
+      throw new Error(data.message);
+    }
     throw new Error(typeof data.error === "string" ? data.error : "Could not save profile");
   }
 }
 
-export function HealthProfileOnboarding({ open, onFinished }: HealthProfileOnboardingProps) {
+export function HealthProfileOnboarding({ open, onFinished, isPro }: HealthProfileOnboardingProps) {
   const [step, setStep] = useState<1 | 2>(1);
   const [tags, setTags] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
@@ -130,7 +135,11 @@ export function HealthProfileOnboarding({ open, onFinished }: HealthProfileOnboa
               <p className="text-sm text-muted-foreground mt-1.5 mb-5 leading-relaxed">
                 Select anything that applies. This helps Praxis tailor theories and protocols — no wrong answers.
               </p>
-              <HealthTagsEditor selected={tags} onChange={setTags} />
+              <HealthTagsEditor
+                selected={tags}
+                onChange={setTags}
+                maxTags={isPro ? undefined : FREE_HEALTH_TAGS_MAX}
+              />
             </>
           )}
 

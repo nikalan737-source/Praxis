@@ -15,7 +15,10 @@ const links = [
   { href: "/profile", label: "Profile" },
 ];
 
-type ProfileSummary = { is_pro?: boolean } | null;
+type ProfileSummary = {
+  is_pro?: boolean;
+  health_profile_onboarding_completed?: boolean;
+} | null;
 
 export default function NavClient() {
   const { user, isLoading } = useAuth();
@@ -34,6 +37,11 @@ export default function NavClient() {
   }, [user]);
 
   if (pathname === "/") return null;
+
+  const showHealthOnboardingNudge =
+    !!user &&
+    profile?.health_profile_onboarding_completed === false &&
+    pathname !== "/profile";
 
   return (
     <>
@@ -101,6 +109,15 @@ export default function NavClient() {
           )}
         </div>
       </header>
+      {showHealthOnboardingNudge && (
+        <div className="w-full border-b border-primary/20 bg-primary/[0.08] px-4 py-2.5 text-center text-sm text-foreground/90">
+          <span className="text-muted-foreground">Quick setup — </span>
+          <Link href="/profile" className="font-semibold text-primary underline-offset-2 hover:underline">
+            tell Praxis about your health context
+          </Link>
+          <span className="text-muted-foreground"> so theories fit you better.</span>
+        </div>
+      )}
       <LoginModal isOpen={loginOpen} onClose={() => setLoginOpen(false)} />
     </>
   );
