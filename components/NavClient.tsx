@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Beaker } from "lucide-react";
@@ -15,12 +15,24 @@ const links = [
   { href: "/profile", label: "Profile" },
 ];
 
+type ProfileSummary = { is_pro?: boolean } | null;
+
 export default function NavClient() {
-  const { user, signOut, isLoading } = useAuth();
+  const { user, isLoading } = useAuth();
   const [loginOpen, setLoginOpen] = useState(false);
+  const [profile, setProfile] = useState<ProfileSummary>(null);
   const pathname = usePathname();
 
-  // The landing page renders its own Nav, so suppress the global one there.
+  useEffect(() => {
+    if (!user) { setProfile(null); return; }
+    let cancelled = false;
+    fetch("/api/profile")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => { if (!cancelled && data) setProfile(data); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [user]);
+
   if (pathname === "/") return null;
 
   return (
@@ -60,19 +72,22 @@ export default function NavClient() {
           {!isLoading && (
             <div className="flex items-center gap-3">
               {user ? (
-                <>
-                  <span className="text-muted-foreground truncate max-w-[140px] text-xs">
-                    {user.email}
-                  </span>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="rounded-full"
-                    onClick={() => signOut()}
+                <Link
+                  href="/profile"
+                  className="flex items-center gap-2 hover:opacity-80 transition-opacity"
+                >
+                  <span
+                    className={cn(
+                      "w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold bg-primary/15 text-primary",
+                      profile?.is_pro && "ring-2 ring-primary ring-offset-1",
+                    )}
                   >
-                    Sign out
-                  </Button>
-                </>
+                    {user.email?.[0]?.toUpperCase() ?? "?"}
+                  </span>
+                  {profile?.is_pro && (
+                    <span className="text-xs font-semibold text-primary">Pro</span>
+                  )}
+                </Link>
               ) : (
                 <Button
                   size="sm"

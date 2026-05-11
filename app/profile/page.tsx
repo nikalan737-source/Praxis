@@ -25,7 +25,10 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { ExperimentSetupModal } from "@/components/ExperimentSetupModal";
+import { HealthProfileOnboarding } from "@/components/HealthProfileOnboarding";
+import { HealthTagsManageModal } from "@/components/HealthTagsManageModal";
 import { cn } from "@/lib/utils";
+import { X } from "lucide-react";
 
 // ── Shared helpers ─────────────────────────────────────────────────────────────
 
@@ -2282,7 +2285,7 @@ function PublishedTab({
 function ProfilePageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { user, isLoading } = useAuth();
+  const { user, signOut, isLoading } = useAuth();
   const [upgradeSuccess, setUpgradeSuccess] = useState(false);
   const { savedIds } = useSavedTheories();
   const { logs, deleteLog, togglePublic } = useExperimentLogs();
@@ -2291,9 +2294,16 @@ function ProfilePageInner() {
   const [activeExperiments, setActiveExperiments] = useState<ActiveExperiment[]>([]);
   const [setupTheory, setSetupTheory] = useState<TheoryBlock | null>(null);
   const [loginModalOpen, setLoginModalOpen] = useState(false);
-  const [profile, setProfile] = useState<{ is_pro: boolean; theory_generations_this_month: number; generation_month: string | null } | null>(null);
+  const [profile, setProfile] = useState<{
+    is_pro: boolean;
+    theory_generations_this_month: number;
+    generation_month: string | null;
+    health_tags?: string[];
+    health_profile_onboarding_completed?: boolean;
+  } | null>(null);
   const [upgrading, setUpgrading] = useState(false);
   const [managingBilling, setManagingBilling] = useState(false);
+  const [healthTagsModalOpen, setHealthTagsModalOpen] = useState(false);
 
   useEffect(() => {
     if (!isLoading && !user) router.replace("/community");
@@ -2358,14 +2368,35 @@ function ProfilePageInner() {
       .catch(() => setActiveExperiments([]));
   }, [user]);
 
+  const refreshProfile = useCallback(async () => {
+    if (!user) return;
+    try {
+      const res = await fetch("/api/profile");
+      if (res.ok) setProfile(await res.json());
+    } catch { /* ignore */ }
+  }, [user]);
+
   // Fetch profile for subscription status
   useEffect(() => {
-    if (!user) return;
-    fetch("/api/profile")
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => { if (data) setProfile(data); })
-      .catch(() => {});
-  }, [user]);
+    void refreshProfile();
+  }, [refreshProfile]);
+
+  async function removeHealthTag(tag: string) {
+    const prev = profile?.health_tags ?? [];
+    const next = prev.filter((t) => t !== tag);
+    try {
+      const res = await fetch("/api/profile", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ health_tags: next }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const saved = Array.isArray(data.health_tags) ? data.health_tags : next;
+        setProfile((p) => (p ? { ...p, health_tags: saved } : p));
+      }
+    } catch { /* ignore */ }
+  }
 
   async function handleUpgrade() {
     setUpgrading(true);
@@ -2460,17 +2491,7 @@ function ProfilePageInner() {
               </>
             )}
           </div>
-          {profile.is_pro ? (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleManageBilling}
-              disabled={managingBilling}
-              className="shrink-0 text-xs"
-            >
-              {managingBilling ? "Loading…" : "Manage Billing"}
-            </Button>
-          ) : (
+          {!profile.is_pro && (
             <Button
               size="sm"
               onClick={handleUpgrade}
@@ -2481,6 +2502,64 @@ function ProfilePageInner() {
             </Button>
           )}
         </div>
+      )}
+
+      {profile?.is_pro && (
+        <div className="-mt-4 mb-6">
+          <button
+            type="button"
+            onClick={handleManageBilling}
+            disabled={managingBilling}
+            className="text-xs text-muted-foreground underline-offset-2 hover:underline disabled:opacity-60"
+          >
+            {managingBilling ? "Loading…" : "Manage billing"}
+          </button>
+        </div>
+      )}
+
+      {profile && (
+        <section className="rounded-xl border border-primary/15 bg-gradient-to-br from-primary/[0.07] via-card to-card p-4 mb-6 shadow-sm">
+          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-3">
+            <div>
+              <h2 className="text-sm font-semibold text-foreground">My Health Profile</h2>
+              <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed max-w-md">
+                Topics you share here shape how we generate theories — always editable.
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="shrink-0 border-primary/30 text-primary hover:bg-primary/10"
+              onClick={() => setHealthTagsModalOpen(true)}
+            >
+              + Add more
+            </Button>
+          </div>
+          {(profile.health_tags?.length ?? 0) === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              Nothing saved yet. Add a few topics when you&apos;re ready — or skip until inspiration strikes.
+            </p>
+          ) : (
+            <ul className="flex flex-wrap gap-2">
+              {(profile.health_tags ?? []).map((tag) => (
+                <li key={tag}>
+                  <span className="inline-flex items-center gap-1 rounded-full border border-primary/25 bg-primary/10 text-primary pl-3 pr-1 py-1 text-xs font-medium">
+                    {tag}
+                    <button
+                      type="button"
+                      className="rounded-full p-1 text-primary hover:bg-primary/15 transition-colors"
+                      aria-label={`Remove ${tag}`}
+                      onClick={() => void removeHealthTag(tag)}
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
       )}
 
       <Tabs defaultValue="habits">
@@ -2567,6 +2646,19 @@ function ProfilePageInner() {
 
       <LoginModal isOpen={loginModalOpen} onClose={() => setLoginModalOpen(false)} />
 
+      {profile?.health_profile_onboarding_completed === false && (
+        <HealthProfileOnboarding open onFinished={() => void refreshProfile()} />
+      )}
+
+      <HealthTagsManageModal
+        open={healthTagsModalOpen}
+        onOpenChange={setHealthTagsModalOpen}
+        initialTags={profile?.health_tags ?? []}
+        onSaved={(tags) =>
+          setProfile((p) => (p ? { ...p, health_tags: tags } : p))
+        }
+      />
+
       {setupTheory && (
         <ExperimentSetupModal
           isOpen={true}
@@ -2580,6 +2672,19 @@ function ProfilePageInner() {
             interventions: setupTheory.interventions.map((iv) => ({ name: iv.name })),
           }}
         />
+      )}
+
+      {user && (
+        <div className="mt-12 pt-6 border-t border-border flex">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => signOut()}
+            className="text-xs text-muted-foreground hover:text-foreground"
+          >
+            Sign out
+          </Button>
+        </div>
       )}
     </div>
   );

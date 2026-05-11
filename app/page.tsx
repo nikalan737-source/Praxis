@@ -3,6 +3,7 @@
 import AmbientBackground from "@/components/landing/AmbientBackground";
 import Nav from "@/components/landing/Nav";
 import Hero from "@/components/landing/Hero";
+import HealthProfileShowcase from "@/components/landing/HealthProfileShowcase";
 import Problem from "@/components/landing/Problem";
 import HowItWorks from "@/components/landing/HowItWorks";
 import SocialProof from "@/components/landing/SocialProof";
@@ -16,6 +17,7 @@ export default function LandingPage() {
       <AmbientBackground />
       <Nav />
       <Hero />
+      <HealthProfileShowcase />
       <Problem />
       <HowItWorks />
       <SocialProof />

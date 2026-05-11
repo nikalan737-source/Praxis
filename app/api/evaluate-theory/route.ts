@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 import { EvaluateMultiResultSchema } from "@/lib/theory-block-schema";
 import type { PubMedArticle } from "@/types/theory-block";
+import { createClient } from "@/lib/supabase/server";
+import { buildHealthTagsPromptSection } from "@/lib/health-profile-prompt";
 
 const openai = () => {
   const apiKey = process.env.OPENAI_API_KEY;
@@ -130,14 +132,17 @@ async function searchPubMed(queries: string[]): Promise<PubMedArticle[]> {
 function buildEvalPrompt(
   title: string, goal: string, theory: string,
   protocol: string, category: string,
-  articles: PubMedArticle[]
+  articles: PubMedArticle[],
+  healthTags: string[]
 ): string {
   const articleContext = articles.length > 0
     ? `\n\nRELEVANT RESEARCH (use to evaluate — don't just summarize):\n` +
       articles.map((a) => `[PMID ${a.pmid}] "${a.title}" — ${a.authors} (${a.year}, ${a.source})`).join("\n")
     : "\n\nNo directly matching PubMed articles found. Evaluate using general scientific knowledge.";
+  const healthCtx = buildHealthTagsPromptSection(healthTags);
 
   return `You are a scientific peer reviewer evaluating a user-submitted health theory. Your job is to analyze the ENTIRE theory thoroughly and SEGMENT IT into MANY separate theory blocks based on how well-supported each component is by evidence. You must cover EVERY part of the user's theory — do not skip or summarize away any section.
+${healthCtx}
 
 USER'S THEORY:
 - Title: "${title}"
@@ -224,10 +229,11 @@ async function callOpenAI(
   title: string, goal: string, theory: string,
   protocol: string, category: string,
   articles: PubMedArticle[],
+  healthTags: string[],
   repairErrors?: string
 ): Promise<string> {
   const client = openai();
-  const systemPrompt = buildEvalPrompt(title, goal, theory, protocol, category, articles);
+  const systemPrompt = buildEvalPrompt(title, goal, theory, protocol, category, articles, healthTags);
   const userMessage = repairErrors
     ? `Fix this JSON to match the schema. Errors:\n${repairErrors}\nReturn ONLY valid JSON.`
     : "Evaluate the theory and return your analysis as JSON now.";
@@ -263,6 +269,18 @@ export async function POST(request: NextRequest) {
 
     const categoryNorm = category?.trim() || "Physical";
 
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    let healthTags: string[] = [];
+    if (user) {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("health_tags")
+        .eq("id", user.id)
+        .single();
+      healthTags = Array.isArray(profile?.health_tags) ? profile.health_tags : [];
+    }
+
     // Step 0: Validate health topic
     const topicCheck = await validateHealthTopic(title.trim(), goal.trim(), theory.trim());
     if (!topicCheck.valid) {
@@ -280,7 +298,7 @@ export async function POST(request: NextRequest) {
     // Step 3: Evaluate (multi-block)
     let raw: string;
     try {
-      raw = await callOpenAI(title.trim(), goal.trim(), theory.trim(), protocol?.trim() ?? "", categoryNorm, articles);
+      raw = await callOpenAI(title.trim(), goal.trim(), theory.trim(), protocol?.trim() ?? "", categoryNorm, articles, healthTags);
     } catch (e) {
       if ((e as Error).message === "OPENAI_API_KEY_MISSING") {
         return NextResponse.json({ error: "OpenAI API key not configured." }, { status: 503 });
@@ -312,7 +330,7 @@ export async function POST(request: NextRequest) {
     const errors = first.error.errors.map((e) => `${e.path.join(".")}: ${e.message}`).join("\n");
     let repairRaw: string;
     try {
-      repairRaw = await callOpenAI(title.trim(), goal.trim(), theory.trim(), protocol?.trim() ?? "", categoryNorm, articles, errors);
+      repairRaw = await callOpenAI(title.trim(), goal.trim(), theory.trim(), protocol?.trim() ?? "", categoryNorm, articles, healthTags, errors);
     } catch {
       return NextResponse.json({ error: "Evaluation failed. Please try again." }, { status: 502 });
     }

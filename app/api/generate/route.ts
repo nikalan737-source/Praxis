@@ -4,6 +4,7 @@ import { GenerateResultSchema } from "@/lib/theory-block-schema";
 import type { PubMedArticle } from "@/types/theory-block";
 import { createClient } from "@/lib/supabase/server";
 import { FREE_TIER_MONTHLY_GENERATIONS } from "@/lib/stripe";
+import { buildHealthTagsPromptSection } from "@/lib/health-profile-prompt";
 
 export const dynamic = "force-dynamic";
 
@@ -107,16 +108,17 @@ async function searchPubMed(queries: string[]): Promise<PubMedArticle[]> {
 
 // ── Step 3: Generate theory blocks with synthesis prompt ──────────────────────
 
-function buildSystemPrompt(articles: PubMedArticle[], goal: string): string {
+function buildSystemPrompt(articles: PubMedArticle[], goal: string, healthTags: string[]): string {
   const articleContext = articles.length > 0
     ? `\n\nRELEVANT RESEARCH (use these to reason from — don't just summarize them):\n` +
       articles.map((a) => `[PMID ${a.pmid}] "${a.title}" — ${a.authors} (${a.year}, ${a.source})`).join("\n")
     : "\n\nNo PubMed articles found. Reason from established physiology and biochemistry.";
+  const healthCtx = buildHealthTagsPromptSection(healthTags);
 
   return `You are a research scientist and mechanistic thinker. Your job is NOT to summarize studies — it is to reason from biology, find non-obvious connections, and generate surprising but grounded insights.
 
 USER GOAL: "${goal}"
-${articleContext}
+${articleContext}${healthCtx}
 
 Generate 10-15 theory blocks as a JSON object. The number of blocks per evidence tier should be determined entirely by what the evidence actually supports for this specific goal — do NOT try to balance tiers equally. If the goal has 8 strong-evidence mechanisms, generate 8 Strong blocks. If something is almost entirely speculative, you might only have 1-2 Unsupported blocks. Let the science dictate the distribution.
 
@@ -184,7 +186,7 @@ Rules:
 - Each block's keyInsight must be unique — never restate another block's insight in different words`;
 }
 
-async function callOpenAI(goal: string, articles: PubMedArticle[], repairErrors?: string): Promise<string> {
+async function callOpenAI(goal: string, articles: PubMedArticle[], healthTags: string[], repairErrors?: string): Promise<string> {
   const client = openai();
   const userMessage = repairErrors
     ? `Fix this JSON to match the schema. Errors:\n${repairErrors}\nReturn ONLY valid JSON.`
@@ -193,7 +195,7 @@ async function callOpenAI(goal: string, articles: PubMedArticle[], repairErrors?
   const res = await client.chat.completions.create({
     model: "gpt-4o-mini",
     messages: [
-      { role: "system", content: buildSystemPrompt(articles, goal) },
+      { role: "system", content: buildSystemPrompt(articles, goal, healthTags) },
       { role: "user", content: userMessage },
     ],
     response_format: { type: "json_object" },
@@ -215,14 +217,17 @@ export async function POST(request: NextRequest) {
     // ── Check generation limits for authenticated users ──────────────────────
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
+    let healthTags: string[] = [];
 
     if (user) {
       const currentMonth = new Date().toISOString().slice(0, 7); // 'YYYY-MM'
       const { data: profile } = await supabase
         .from("profiles")
-        .select("is_pro, theory_generations_this_month, generation_month")
+        .select("is_pro, theory_generations_this_month, generation_month, health_tags")
         .eq("id", user.id)
         .single();
+
+      healthTags = Array.isArray(profile?.health_tags) ? profile.health_tags : [];
 
       if (profile && !profile.is_pro) {
         const activeMonth = profile.generation_month === currentMonth
@@ -279,7 +284,7 @@ export async function POST(request: NextRequest) {
     // Step 3: Generate with synthesis-focused prompt
     let raw: string;
     try {
-      raw = await callOpenAI(goalNorm, articles);
+      raw = await callOpenAI(goalNorm, articles, healthTags);
     } catch (e) {
       if ((e as Error).message === "OPENAI_API_KEY_MISSING") {
         return NextResponse.json({ error: "OpenAI API key not configured." }, { status: 503 });
@@ -319,7 +324,7 @@ export async function POST(request: NextRequest) {
     // Repair pass
     const errors = first.error.errors.map((e) => `${e.path.join(".")}: ${e.message}`).join("\n");
     let repairRaw: string;
-    try { repairRaw = await callOpenAI(goalNorm, articles, errors); } catch {
+    try { repairRaw = await callOpenAI(goalNorm, articles, healthTags, errors); } catch {
       return NextResponse.json({ error: "Generation failed. Please try again." }, { status: 502 });
     }
 
