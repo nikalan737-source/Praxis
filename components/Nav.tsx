@@ -1,7 +1,6 @@
 import Link from "next/link";
 
 const links = [
-  { href: "/community", label: "Community" },
   { href: "/generate", label: "Generate" },
   { href: "/profile", label: "Profile" },
 ];

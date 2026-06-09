@@ -3,12 +3,16 @@
 import { HEALTH_TAG_PRESETS } from "@/lib/health-tag-presets";
 import { cn } from "@/lib/utils";
 
-/** Highlight exactly three cards so the mockup matches the free-tier note below */
-const MOCK_SELECTED_LABELS = new Set([
-  "Postpartum recovery",
-  "Herniated disk",
-  "Sleep optimization",
-]);
+const LIFE_STAGE_CALLOUTS = [
+  "Postpartum",
+  "Perimenopause",
+  "Menopause",
+  "Andropause",
+  "Busy career",
+] as const;
+
+/** Highlight three cards aligned with core ICP contexts */
+const MOCK_SELECTED_LABELS = new Set(["Postpartum recovery", "Perimenopause", "Low energy"]);
 
 const HealthProfileShowcase = () => {
   return (
@@ -16,11 +20,24 @@ const HealthProfileShowcase = () => {
       <div className="container px-6">
         <div className="mx-auto max-w-3xl text-center">
           <h2 className="font-display text-3xl font-bold tracking-tight text-foreground sm:text-4xl md:text-5xl">
-            Built around your body, not the average one
+            Your context — not the average on a chart
           </h2>
+          <div
+            className="mt-6 flex flex-wrap items-center justify-center gap-2"
+            aria-label="Life stages and situations Praxis supports"
+          >
+            {LIFE_STAGE_CALLOUTS.map((label) => (
+              <span
+                key={label}
+                className="rounded-full border border-white/70 bg-white/55 px-3.5 py-1.5 text-xs font-medium text-foreground/85 shadow-[inset_0_1px_0_0_hsl(0_0%_100%/0.85)] backdrop-blur-md"
+              >
+                {label}
+              </span>
+            ))}
+          </div>
           <p className="mt-5 text-base leading-relaxed text-muted-foreground sm:text-lg">
-            Tell Praxis what to keep in mind and every theory it generates accounts for your specific
-            situation
+            Tell Praxis what applies: life stage, injuries, sleep, stress, hormones. Every plan it suggests
+            is filtered for the body and schedule you have now.
           </p>
         </div>
 
@@ -52,9 +69,7 @@ const HealthProfileShowcase = () => {
                     <span
                       className={cn(
                         "inline-flex h-9 w-9 items-center justify-center rounded-lg sm:h-10 sm:w-10",
-                        selected
-                          ? "bg-primary/20 text-primary"
-                          : "bg-primary/10 text-primary/90"
+                        selected ? "bg-primary/20 text-primary" : "bg-primary/10 text-primary/90"
                       )}
                     >
                       <Icon className="h-4 w-4 sm:h-[1.125rem] sm:w-[1.125rem]" aria-hidden />

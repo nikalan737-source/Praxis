@@ -3,12 +3,12 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 
-// Redirect old log submission page to community
+// Redirect legacy log submission URLs to create
 export default function LogRedirect() {
   const router = useRouter();
 
   useEffect(() => {
-    router.replace("/community");
+    router.replace("/create");
   }, [router]);
 
   return (

@@ -22,12 +22,12 @@ const STEPS = [
     emoji: "🔬",
     title: "AI Evaluates the Evidence",
     body: "Once you submit your theory, our AI reviews the science and breaks it into blocks by evidence strength — Strong, Emerging, Theoretical, or Unsupported. Each block comes with suggested protocols and habits backed by research.",
-    hint: "Tip: You can also browse AI-generated theories from the community.",
+    hint: "Tip: You can also generate AI theories from the Create page.",
   },
   {
     emoji: "💾",
     title: "Save to Your Profile",
-    body: "Found a theory you like? Hit the save button to add it to your profile. Saving is how you build your personal library — and it's the first step to turning a theory into habits you actually track. You can save theories from the community or ones you create yourself.",
+    body: "Found a theory you like? Hit the save button to add it to your profile. Saving is how you build your personal library — and it's the first step to turning a theory into habits you actually track. You can save theories you create yourself or generate with AI.",
     hint: "Tip: You need to save a theory before you can add its habits to your daily tracker.",
   },
   {
@@ -45,7 +45,7 @@ const STEPS = [
   {
     emoji: "🏁",
     title: "You're ready to go",
-    body: "Head to the Community to browse what others are running, or jump straight into creating your first theory. Your profile tracks all your active and completed protocols in one place.",
+    body: "Jump straight into creating your first theory on the Create page. Your profile tracks all your active and completed protocols in one place.",
     hint: null,
   },
 ];

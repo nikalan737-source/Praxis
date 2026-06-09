@@ -88,25 +88,15 @@ function References({ pmids, articles }: { pmids: string[]; articles: PubMedArti
 function TierBlock({
   block,
   articles,
-  isSelected,
-  onToggleSelect,
-  isPublished,
 }: {
   block: TheoryBlock;
   articles: PubMedArticle[];
-  isSelected: boolean;
-  onToggleSelect: (block: TheoryBlock) => void;
-  isPublished: boolean;
 }) {
   const cfg = TIER_CONFIG[block.evidenceTier];
   const [showInterventions, setShowInterventions] = useState(false);
 
   return (
-    <article className={`border rounded-2xl overflow-hidden transition-all ${
-      isPublished ? "border-emerald-500/40 bg-zinc-900"
-      : isSelected ? "border-white/30 bg-zinc-900 ring-1 ring-white/10"
-      : `${cfg.border} bg-zinc-900`
-    }`}>
+    <article className={`border rounded-2xl overflow-hidden transition-all ${cfg.border} bg-zinc-900`}>
       {/* Tier header */}
       <div className={`px-4 py-3 ${cfg.header} flex items-center justify-between gap-2 border-b border-zinc-700/50`}>
         <div className="flex items-center gap-2">
@@ -132,26 +122,6 @@ function TierBlock({
           )}
           <span className="text-xs text-zinc-500">{cfg.label}</span>
         </div>
-        {isPublished ? (
-          <Link
-            href="/community"
-            className="text-xs px-3 py-1.5 rounded-lg bg-emerald-600/20 border border-emerald-500/40 text-emerald-400 font-medium hover:bg-emerald-600/30 transition-colors"
-          >
-            Published ✓
-          </Link>
-        ) : (
-          <button
-            type="button"
-            onClick={() => onToggleSelect(block)}
-            className={`text-xs px-3 py-1.5 rounded-lg font-semibold transition-colors ${
-              isSelected
-                ? "bg-white text-zinc-900 hover:bg-zinc-200"
-                : "border border-zinc-600 text-zinc-400 hover:border-zinc-400 hover:text-white"
-            }`}
-          >
-            {isSelected ? "✓ Added" : "+ Add"}
-          </button>
-        )}
       </div>
 
       {/* Body */}
@@ -454,7 +424,7 @@ function GeneratePageContent() {
         <div className="mt-6 rounded-xl border border-amber-500/30 bg-amber-500/5 p-5 text-center space-y-3">
           <p className="text-sm font-semibold text-amber-400">You've used all 10 free generations this month</p>
           <p className="text-xs text-zinc-400">
-            Upgrade to Praxis Pro for unlimited theory generations, full community analytics, and more.
+            Upgrade to Praxis Pro for unlimited theory generations, advanced analytics, and more.
           </p>
           <button
             onClick={handleUpgrade}
@@ -483,9 +453,8 @@ function GeneratePageContent() {
             </div>
           )}
 
-          {/* Selection hint */}
           <p className="text-xs text-zinc-500 mb-4">
-            Click <span className="text-zinc-300 font-medium">+ Add</span> on any blocks you want to publish together, then publish them as a combined theory.
+            Review the blocks below — each tier reflects how strong the evidence is for a different angle on your goal.
           </p>
 
           <div className="space-y-5">
@@ -497,40 +466,9 @@ function GeneratePageContent() {
                   key={block.id}
                   block={block}
                   articles={result.articles}
-                  isSelected={selectedIds.has(block.id)}
-                  onToggleSelect={toggleSelect}
-                  isPublished={publishedIds.has(block.id)}
                 />
               );
             })}
-          </div>
-        </div>
-      )}
-
-      {/* Sticky publish bar */}
-      {unpublishedSelected.length > 0 && (
-        <div className="fixed bottom-0 left-0 right-0 z-20 flex justify-center pb-6 pointer-events-none">
-          <div className="pointer-events-auto flex items-center gap-3 bg-zinc-900 border border-zinc-700 rounded-2xl px-5 py-3 shadow-2xl">
-            <div className="flex -space-x-1">
-              {unpublishedSelected.map((b) => (
-                <span
-                  key={b.id}
-                  className={`w-2.5 h-2.5 rounded-full border-2 border-zinc-900 ${TIER_CONFIG[b.evidenceTier].dot}`}
-                />
-              ))}
-            </div>
-            <span className="text-sm text-zinc-300">
-              <span className="font-semibold text-white">{unpublishedSelected.length}</span>{" "}
-              {unpublishedSelected.length === 1 ? "block" : "blocks"} selected
-            </span>
-            <button
-              type="button"
-              onClick={handlePublishSelected}
-              disabled={publishingAll}
-              className="px-4 py-1.5 rounded-xl bg-white text-zinc-900 text-sm font-semibold hover:bg-zinc-100 transition-colors disabled:opacity-50"
-            >
-              {publishingAll ? "Publishing…" : "Publish →"}
-            </button>
           </div>
         </div>
       )}

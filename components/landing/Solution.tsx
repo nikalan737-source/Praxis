@@ -1,34 +1,34 @@
-import { Repeat2, Scale, BookOpen } from "lucide-react";
+import { Microscope, FlaskConical, Puzzle } from "lucide-react";
 
-const points = [
+const features = [
   {
-    icon: Repeat2,
-    title: "The same workouts. The same diet. Different results.",
-    body: "Your hormones and recovery changed. What worked before may not work the same way now.",
+    icon: Microscope,
+    title: "Research you can actually use",
+    body: "We pull from solid medical studies and label how strong the support is. Filtered for your age, stage, and what you told us about your health.",
   },
   {
-    icon: Scale,
-    title: "Your trainer wants to help. They legally can't.",
-    body: "Rules and scope mean you often get safe, generic tips — even when you need something more specific.",
+    icon: FlaskConical,
+    title: "A simple way to test what works",
+    body: "Set a goal, follow the daily steps, and log how you feel. You see what helps — not just whether you were busy.",
   },
   {
-    icon: BookOpen,
-    title: "Hours of research. Still no clear answer.",
-    body: "The answers are out there. They are rarely spelled out for your exact situation.",
+    icon: Puzzle,
+    title: "Built for the messy middle",
+    body: "Hormone shifts, injury, sleep, stress, performance — the spots where generic advice stops fitting and your story matters.",
   },
 ];
 
-const Problem = () => {
+const Solution = () => {
   return (
-    <section id="problem" className="py-24 md:py-32">
+    <section id="solution" className="py-24 md:py-32">
       <div className="container px-6">
         <div className="mx-auto max-w-3xl text-center">
           <h2 className="font-display text-3xl font-bold tracking-tight sm:text-4xl md:text-5xl text-foreground">
-            Generic advice was never built for this.
+            A system built around where your body actually is.
           </h2>
         </div>
         <div className="mx-auto mt-16 grid max-w-6xl gap-6 md:grid-cols-3">
-          {points.map(({ icon: Icon, title, body }) => (
+          {features.map(({ icon: Icon, title, body }) => (
             <div
               key={title}
               className="glass-panel group p-7 transition-all hover:-translate-y-1 hover:bg-white/70"
@@ -46,4 +46,4 @@ const Problem = () => {
   );
 };
 
-export default Problem;
+export default Solution;

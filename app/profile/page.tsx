@@ -6,10 +6,8 @@ import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSavedTheories } from "@/hooks/useSavedTheories";
 import { useExperimentLogs } from "@/hooks/useExperimentLogs";
-import { useUpvotes } from "@/hooks/useUpvotes";
 import { useTheoryCounts } from "@/hooks/useTheoryCounts";
 import { SaveButton } from "@/components/SaveButton";
-import { UpvoteButton } from "@/components/UpvoteButton";
 import { LoginModal } from "@/components/LoginModal";
 import type { TheoryBlock } from "@/types/theory-block";
 import type { ExperimentLog } from "@/types/experiment-log";
@@ -799,12 +797,12 @@ function SavedCard({
   onStartExperiment: (block: TheoryBlock) => void;
   onLoginRequest: () => void;
 }) {
-  const [expandedPanel, setExpandedPanel] = useState<"theory" | "logs" | null>(null);
+  const [expandedPanel, setExpandedPanel] = useState<"theory" | null>(null);
   const [addingStepIdx, setAddingStepIdx] = useState<number | null>(null);
   const [addedSteps, setAddedSteps] = useState<number[]>([]);
   const isCombined = block.combinedTiers && block.combinedTiers.length > 1;
 
-  function togglePanel(panel: "theory" | "logs") {
+  function togglePanel(panel: "theory") {
     setExpandedPanel((prev) => (prev === panel ? null : panel));
   }
 
@@ -883,14 +881,6 @@ function SavedCard({
               onClick={() => togglePanel("theory")}
             >
               {expandedPanel === "theory" ? "▲" : "▼"} Theory
-            </Button>
-            <Button
-              variant={expandedPanel === "logs" ? "secondary" : "secondary"}
-              size="sm"
-              className="h-7 text-xs px-3"
-              onClick={() => togglePanel("logs")}
-            >
-              {expandedPanel === "logs" ? "▲" : "▼"} Updates
             </Button>
           </div>
         </div>
@@ -1039,13 +1029,6 @@ function SavedCard({
           </CardContent>
         </>
       )}
-
-      {/* Logs panel */}
-      {expandedPanel === "logs" && (
-        <div className="border-t border-border p-4 bg-background/30">
-          <PubLogsPanel theoryId={block.id} onLoginRequest={onLoginRequest} />
-        </div>
-      )}
     </Card>
   );
 }
@@ -1055,15 +1038,12 @@ function SavedCard({
 function LogEntry({
   log,
   onDelete,
-  onTogglePublic,
 }: {
   log: ExperimentLog;
   onDelete: (id: string) => void;
-  onTogglePublic: (id: string, isPublic: boolean) => Promise<void>;
 }) {
   const start = log.startedAt ?? "—";
   const end = log.endedAt ?? (log.status === "in_progress" ? "in progress" : "—");
-  const [toggling, setToggling] = useState(false);
   const [updates, setUpdates] = useState<LogUpdate[]>([]);
   const [updatesLoaded, setUpdatesLoaded] = useState(false);
   const [showUpdates, setShowUpdates] = useState(false);
@@ -1074,12 +1054,6 @@ function LogEntry({
   const [updateOutcome, setUpdateOutcome] = useState<string>("");
   const [updateSideEffects, setUpdateSideEffects] = useState("");
   const [posting, setPosting] = useState(false);
-
-  async function handleTogglePublic() {
-    setToggling(true);
-    await onTogglePublic(log.id, !log.isPublic);
-    setToggling(false);
-  }
 
   async function loadUpdates() {
     if (updatesLoaded) return;
@@ -1128,9 +1102,6 @@ function LogEntry({
             {log.status === "in_progress" && (
               <Badge variant="default" className="text-[10px]">In progress</Badge>
             )}
-            <Badge variant={log.isPublic ? "strong" : "secondary"} className="text-[10px]">
-              {log.isPublic ? "Public" : "Private"}
-            </Badge>
           </div>
           <p className="text-xs text-muted-foreground mt-0.5 font-mono">
             {log.adherencePercent}% adherence · Outcome {log.outcomeRating}/10
@@ -1140,10 +1111,6 @@ function LogEntry({
           )}
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          <Button variant="outline" size="sm" className="h-7 text-xs"
-            onClick={handleTogglePublic} disabled={toggling}>
-            {toggling ? "…" : log.isPublic ? "Make private" : "Publish"}
-          </Button>
           <Link href={`/log/${log.theoryId}`}>
             <Button variant="ghost" size="sm" className="h-7 text-xs">New log</Button>
           </Link>
@@ -1295,11 +1262,9 @@ function formatEntryDate(dateStr: string): string {
 function ProtocolCard({
   exp,
   entries,
-  onToggleEntryPublic,
 }: {
   exp: ActiveExperiment;
   entries: JournalEntry[];
-  onToggleEntryPublic: (experimentId: string, entryId: string, newValue: boolean) => void;
 }) {
   const [showHistory, setShowHistory] = useState(false);
 
@@ -1397,38 +1362,6 @@ function ProtocolCard({
                           {formatEntryDate(entry.entryDate)}
                           {daysIn > 0 ? ` · Day ${daysIn}` : ""}
                         </span>
-
-                        <div className="ml-auto flex items-center gap-2">
-                          {!entry.isPublic && (
-                            <span className="text-[10px] text-muted-foreground bg-muted/60 rounded px-1.5 py-0.5 font-medium">
-                              Private
-                            </span>
-                          )}
-                          <label className="flex items-center gap-1.5 cursor-pointer select-none">
-                            <span className="text-[10px] text-muted-foreground">Public</span>
-                            <button
-                              type="button"
-                              role="switch"
-                              aria-checked={entry.isPublic}
-                              onClick={() =>
-                                onToggleEntryPublic(exp.experimentId, entry.id, !entry.isPublic)
-                              }
-                              className={cn(
-                                "relative inline-flex h-4 w-7 shrink-0 cursor-pointer rounded-full border transition-colors",
-                                entry.isPublic
-                                  ? "bg-emerald-600 border-emerald-600"
-                                  : "bg-muted border-border"
-                              )}
-                            >
-                              <span
-                                className={cn(
-                                  "inline-block h-3 w-3 rounded-full bg-white shadow transition-transform mt-[1px]",
-                                  entry.isPublic ? "translate-x-3.5" : "translate-x-0.5"
-                                )}
-                              />
-                            </button>
-                          </label>
-                        </div>
                       </div>
 
                       {entry.notes && (
@@ -1507,38 +1440,6 @@ function ExperimentsTab() {
     });
   }, []);
 
-  const handleToggleEntryPublic = useCallback(
-    async (experimentId: string, entryId: string, newValue: boolean) => {
-      // Optimistic update
-      setEntriesByExp((prev) => {
-        const next = { ...prev };
-        next[experimentId] = (next[experimentId] ?? []).map((e) =>
-          e.id === entryId ? { ...e, isPublic: newValue } : e
-        );
-        return next;
-      });
-
-      try {
-        const res = await fetch(`/api/journal-entries/${entryId}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ isPublic: newValue }),
-        });
-        if (!res.ok) throw new Error("patch failed");
-      } catch {
-        // Roll back on error
-        setEntriesByExp((prev) => {
-          const next = { ...prev };
-          next[experimentId] = (next[experimentId] ?? []).map((e) =>
-            e.id === entryId ? { ...e, isPublic: !newValue } : e
-          );
-          return next;
-        });
-      }
-    },
-    []
-  );
-
   if (loading) {
     return (
       <div className="py-8 text-center">
@@ -1552,8 +1453,8 @@ function ExperimentsTab() {
       <div className="py-12 text-center space-y-2">
         <p className="text-muted-foreground">No protocols yet.</p>
         <p className="text-xs text-muted-foreground leading-relaxed max-w-xs mx-auto">
-          Head to the <Link href="/community" className="text-primary font-medium hover:opacity-80">Community</Link> page
-          and click <span className="text-foreground font-medium">Start Protocol</span> on any theory.
+          Open a saved theory on your <Link href="/profile" className="text-primary font-medium hover:opacity-80">Profile</Link>{" "}
+          and click <span className="text-foreground font-medium">Start Protocol</span> to begin.
         </p>
       </div>
     );
@@ -1569,7 +1470,6 @@ function ExperimentsTab() {
               key={exp.experimentId}
               exp={exp}
               entries={entriesByExp[exp.experimentId] ?? []}
-              onToggleEntryPublic={handleToggleEntryPublic}
             />
           ))}
         </div>
@@ -1608,7 +1508,7 @@ function ExperimentsTab() {
         <div className="pt-2 text-center">
           <p className="text-xs text-muted-foreground leading-relaxed max-w-xs mx-auto">
             No active protocols right now.{" "}
-            <Link href="/community" className="text-primary font-medium hover:opacity-80">Start a new one</Link>
+            <Link href="/create" className="text-primary font-medium hover:opacity-80">Start a new one</Link>
           </p>
         </div>
       )}
@@ -1870,38 +1770,24 @@ function PublishedTheoryCard({
   block,
   isSaved,
   onToggleSave,
-  saveCount,
-  upvoteCount,
-  isUpvoted,
-  onToggleUpvote,
-  upvoteLoading,
   logCount,
   avgOutcome,
   activeExperimentId,
   onStartExperiment,
   onLoginRequest,
-  onVisibilityChange,
   onDelete,
 }: {
   block: TheoryBlock & { createdAt?: string; isPublic?: boolean };
   isSaved: boolean;
   onToggleSave: (id: string) => Promise<{ requiresAuth?: boolean } | undefined | void>;
-  saveCount: number;
-  upvoteCount: number;
-  isUpvoted: boolean;
-  onToggleUpvote: (theoryId: string) => Promise<{ requiresAuth?: boolean } | undefined | void>;
-  upvoteLoading: boolean;
   logCount: number;
   avgOutcome: number;
   activeExperimentId?: string;
   onStartExperiment: (block: TheoryBlock) => void;
   onLoginRequest: () => void;
-  onVisibilityChange?: (id: string, isPublic: boolean) => void;
   onDelete?: (id: string) => void;
 }) {
-  const [expandedPanel, setExpandedPanel] = useState<"theory" | "logs" | null>(null);
-  const [isPublic, setIsPublic] = useState(block.isPublic ?? true);
-  const [togglingVisibility, setTogglingVisibility] = useState(false);
+  const [expandedPanel, setExpandedPanel] = useState<"theory" | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
@@ -1917,23 +1803,7 @@ function PublishedTheoryCard({
     }
   }
 
-  async function handleToggleVisibility() {
-    if (togglingVisibility) return;
-    setTogglingVisibility(true);
-    const next = !isPublic;
-    const res = await fetch(`/api/theories/${block.id}/visibility`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ isPublic: next }),
-    });
-    if (res.ok) {
-      setIsPublic(next);
-      onVisibilityChange?.(block.id, next);
-    }
-    setTogglingVisibility(false);
-  }
-
-  function togglePanel(panel: "theory" | "logs") {
+  function togglePanel(panel: "theory") {
     setExpandedPanel((prev) => (prev === panel ? null : panel));
   }
 
@@ -1965,14 +1835,6 @@ function PublishedTheoryCard({
             <Badge variant="secondary" className="text-[10px]">AI</Badge>
           )}
           <span className="text-xs text-muted-foreground font-mono">{block.goalCategory}</span>
-          <span className={cn(
-            "text-[10px] px-2 py-0.5 rounded-full border font-medium",
-            isPublic
-              ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-600"
-              : "bg-muted/50 border-border text-muted-foreground"
-          )}>
-            {isPublic ? "In community" : "Private"}
-          </span>
           {block.createdAt && (
             <span className="text-xs text-muted-foreground font-mono ml-auto">
               {new Date(block.createdAt).toLocaleDateString()}
@@ -1988,8 +1850,6 @@ function PublishedTheoryCard({
           </div>
           <div className="flex items-center gap-1 shrink-0">
             <SaveButton id={block.id} isSaved={isSaved} onToggle={onToggleSave} onLoginRequest={onLoginRequest} />
-            <UpvoteButton theoryId={block.id} count={upvoteCount} isUpvoted={isUpvoted}
-              onToggle={onToggleUpvote} isLoading={upvoteLoading} onLoginRequest={onLoginRequest} />
           </div>
         </div>
       </CardHeader>
@@ -1998,9 +1858,6 @@ function PublishedTheoryCard({
         <Separator className="mb-3" />
         {/* Stats + expand buttons */}
         <div className="flex items-center gap-3 flex-wrap">
-          <span className="text-xs text-muted-foreground font-mono">
-            <span className="font-medium text-foreground">{saveCount}</span> saved
-          </span>
           <span className="text-xs text-muted-foreground font-mono">
             <span className="font-medium text-foreground">{logCount}</span> {logCount === 1 ? "protocol" : "protocols"}
             {logCount > 0 && <span> · {avgOutcome}/10 avg</span>}
@@ -2038,14 +1895,6 @@ function PublishedTheoryCard({
                 🗑
               </Button>
             )}
-            <Button
-              variant="ghost" size="sm"
-              className={cn("h-7 text-xs px-3", isPublic ? "text-muted-foreground" : "text-primary")}
-              onClick={handleToggleVisibility}
-              disabled={togglingVisibility}
-            >
-              {togglingVisibility ? "…" : isPublic ? "Remove from community" : "Publish to community"}
-            </Button>
             {activeExperimentId ? (
               <Link href={`/experiment/${activeExperimentId}`}>
                 <Button variant="default" size="sm" className="h-7 text-xs px-3">View Journal</Button>
@@ -2065,13 +1914,6 @@ function PublishedTheoryCard({
               onClick={() => togglePanel("theory")}
             >
               {expandedPanel === "theory" ? "▲" : "▼"} Theory
-            </Button>
-            <Button
-              variant={expandedPanel === "logs" ? "secondary" : "secondary"}
-              size="sm" className="h-7 text-xs px-3"
-              onClick={() => togglePanel("logs")}
-            >
-              {expandedPanel === "logs" ? "▲" : "▼"} Updates
             </Button>
           </div>
         </div>
@@ -2190,12 +2032,6 @@ function PublishedTheoryCard({
         </div>
       )}
 
-      {/* Logs panel */}
-      {expandedPanel === "logs" && (
-        <div className="border-t border-border p-4 bg-background/30">
-          <PubLogsPanel theoryId={block.id} onLoginRequest={onLoginRequest} />
-        </div>
-      )}
     </Card>
   );
 }
@@ -2224,7 +2060,6 @@ function PublishedTab({
 
   const theoryIds = useMemo(() => theories.map((t) => t.id), [theories]);
   const { counts } = useTheoryCounts(theoryIds);
-  const { counts: upvoteCounts, userUpvoted, toggleUpvote, loading: upvoteLoading } = useUpvotes(theoryIds);
 
   if (loading) {
     return (
@@ -2255,21 +2090,11 @@ function PublishedTab({
             block={block}
             isSaved={isSaved(block.id)}
             onToggleSave={toggleSave}
-            saveCount={counts[block.id]?.saveCount ?? 0}
-            upvoteCount={upvoteCounts[block.id] ?? counts[block.id]?.upvoteCount ?? 0}
-            isUpvoted={userUpvoted.has(block.id)}
-            onToggleUpvote={toggleUpvote}
-            upvoteLoading={upvoteLoading[block.id] ?? false}
             logCount={counts[block.id]?.logCount ?? 0}
             avgOutcome={counts[block.id]?.avgOutcome ?? 0}
             activeExperimentId={activeExpByTheory.get(block.id)}
             onStartExperiment={onStartExperiment}
             onLoginRequest={() => setLoginModalOpen(true)}
-            onVisibilityChange={(id, isPublic) => {
-              setTheories((prev) =>
-                prev.map((t) => (t.id === id ? { ...t, isPublic } : t))
-              );
-            }}
             onDelete={(id) => {
               setTheories((prev) => prev.filter((t) => t.id !== id));
             }}
@@ -2289,7 +2114,7 @@ function ProfilePageInner() {
   const { user, signOut, isLoading } = useAuth();
   const [upgradeSuccess, setUpgradeSuccess] = useState(false);
   const { savedIds } = useSavedTheories();
-  const { logs, deleteLog, togglePublic } = useExperimentLogs();
+  const { logs, deleteLog } = useExperimentLogs();
   const [savedBlocks, setSavedBlocks] = useState<TheoryBlock[]>([]);
   const [theoryTitles, setTheoryTitles] = useState<Record<string, string>>({});
   const [activeExperiments, setActiveExperiments] = useState<ActiveExperiment[]>([]);
@@ -2307,7 +2132,7 @@ function ProfilePageInner() {
   const [healthTagsModalOpen, setHealthTagsModalOpen] = useState(false);
 
   useEffect(() => {
-    if (!isLoading && !user) router.replace("/community");
+    if (!isLoading && !user) router.replace("/");
   }, [user, isLoading, router]);
 
   useEffect(() => {
@@ -2474,7 +2299,7 @@ function ProfilePageInner() {
                   ✦ Praxis Pro
                 </p>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  Unlimited theory generations · Full community analytics
+                  Unlimited theory generations · Advanced analytics
                 </p>
               </>
             ) : (
@@ -2657,7 +2482,6 @@ function ProfilePageInner() {
                           key={log.id}
                           log={log}
                           onDelete={deleteLog}
-                          onTogglePublic={togglePublic}
                         />
                       ))}
                     </CardContent>

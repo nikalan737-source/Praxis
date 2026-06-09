@@ -5,6 +5,7 @@ import Nav from "@/components/landing/Nav";
 import Hero from "@/components/landing/Hero";
 import HealthProfileShowcase from "@/components/landing/HealthProfileShowcase";
 import Problem from "@/components/landing/Problem";
+import Solution from "@/components/landing/Solution";
 import HowItWorks from "@/components/landing/HowItWorks";
 import SocialProof from "@/components/landing/SocialProof";
 import Pricing from "@/components/landing/Pricing";
@@ -19,6 +20,7 @@ export default function LandingPage() {
       <Hero />
       <HealthProfileShowcase />
       <Problem />
+      <Solution />
       <HowItWorks />
       <SocialProof />
       <Pricing />

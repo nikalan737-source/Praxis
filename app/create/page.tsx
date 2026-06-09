@@ -17,6 +17,13 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
+import {
+  buildAiGoalFromTemplate,
+  buildTrackingFieldFromTemplate,
+  type ExperimentTemplate,
+} from "@/lib/experiment-templates";
+import { ExperimentTemplatePicker } from "@/components/ExperimentTemplatePicker";
+import { SuggestedGoalsPicker } from "@/components/SuggestedGoalsPicker";
 
 const UNPUBLISHED_STORAGE_KEY = "unpublished_create_result";
 
@@ -75,39 +82,20 @@ function ActionSteps({ steps }: { steps: string[] }) {
 // ── AI Generated block ────────────────────────────────────────────────────────
 
 function GeneratedBlock({
-  block, articles, isSelected, onToggleSelect, isPublished,
+  block, articles,
 }: {
   block: TheoryBlock; articles: PubMedArticle[];
-  isSelected: boolean; onToggleSelect: (b: TheoryBlock) => void; isPublished: boolean;
 }) {
   const cfg = TIER_CONFIG[block.evidenceTier];
   const [showInterventions, setShowInterventions] = useState(false);
 
   return (
-    <Card className={cn(
-      "overflow-hidden transition-all",
-      isPublished && "border-emerald-500/40",
-      isSelected && !isPublished && "border-primary/50 ring-1 ring-primary/20",
-    )}>
+    <Card className="overflow-hidden transition-all border-border bg-card">
       <CardHeader className="p-5 pb-3 flex-row items-center justify-between gap-2 space-y-0 bg-card">
         <div className="flex items-center gap-2 flex-wrap">
           <span className={cn("w-2 h-2 rounded-full shrink-0", cfg.dot)} />
           <Badge variant={cfg.variant}>{block.evidenceTier}</Badge>
         </div>
-        {isPublished ? (
-          <Link href="/community">
-            <Badge variant="outline" className="border-emerald-500/40 text-emerald-400">Published ✓</Badge>
-          </Link>
-        ) : (
-          <Button
-            variant={isSelected ? "default" : "outline"}
-            size="sm"
-            className="h-7 text-xs"
-            onClick={() => onToggleSelect(block)}
-          >
-            {isSelected ? "✓ Added" : "+ Add"}
-          </Button>
-        )}
       </CardHeader>
       <Separator />
       <CardContent className="p-4 space-y-3">
@@ -177,46 +165,21 @@ function GeneratedBlock({
 // ── Evaluated user theory block ───────────────────────────────────────────────
 
 function EvaluatedBlock({
-  block, articles, onPublish, isPublished, isPublishing,
-  isSelected, onToggleSelect,
+  block, articles,
 }: {
   block: TheoryBlock; articles: PubMedArticle[];
-  onPublish: () => void; isPublished: boolean; isPublishing: boolean;
-  isSelected?: boolean; onToggleSelect?: (b: TheoryBlock) => void;
 }) {
   const cfg = TIER_CONFIG[block.evidenceTier];
   const [showInterventions, setShowInterventions] = useState(false);
 
   return (
-    <Card className={cn(
-      "overflow-hidden transition-all",
-      isPublished && "border-emerald-500/40",
-      isSelected && !isPublished && "border-primary/50 ring-1 ring-primary/20",
-    )}>
+    <Card className="overflow-hidden transition-all border-border bg-card">
       <CardHeader className="p-5 pb-3 flex-row items-center justify-between gap-2 space-y-0 flex-wrap">
         <div className="flex items-center gap-2 flex-wrap">
           <span className={cn("w-2 h-2 rounded-full shrink-0", cfg.dot)} />
           <Badge variant={cfg.variant}>{block.evidenceTier}</Badge>
           <Badge variant="default" className="bg-indigo-500/15 text-indigo-300 border-indigo-500/30">Your theory</Badge>
         </div>
-        {isPublished ? (
-          <Link href="/community">
-            <Badge variant="outline" className="border-emerald-500/40 text-emerald-400">Published ✓</Badge>
-          </Link>
-        ) : onToggleSelect ? (
-          <Button
-            variant={isSelected ? "default" : "outline"}
-            size="sm"
-            className="h-7 text-xs"
-            onClick={() => onToggleSelect(block)}
-          >
-            {isSelected ? "✓ Added" : "+ Add"}
-          </Button>
-        ) : (
-          <Button size="sm" onClick={onPublish} disabled={isPublishing}>
-            {isPublishing ? "Publishing…" : "Publish"}
-          </Button>
-        )}
       </CardHeader>
       <Separator />
       <CardContent className="p-4 space-y-4">
@@ -321,7 +284,7 @@ function CreatePageContent() {
   const [loginRedirect, setLoginRedirect] = useState<string | undefined>();
   const [signInPrompt, setSignInPrompt] = useState<string | null>(null);
 
-  const PUBLISH_PROMPT = "Sign in to publish to the community";
+  const PUBLISH_PROMPT = "Sign in to continue";
 
   // ── AI Generate state ──
   const [aiGoal, setAiGoal] = useState("");
@@ -337,7 +300,9 @@ function CreatePageContent() {
   const [ownTitle, setOwnTitle] = useState("");
   const [ownGoal, setOwnGoal] = useState("");
   const [ownTheory, setOwnTheory] = useState("");
+  const [ownTracking, setOwnTracking] = useState("");
   const [ownCategory, setOwnCategory] = useState("Physical");
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
   const [ownResult, setOwnResult] = useState<EvaluateResult | null>(null);
   const [ownLoading, setOwnLoading] = useState(false);
   const [ownError, setOwnError] = useState<string | null>(null);
@@ -428,6 +393,37 @@ function CreatePageContent() {
     });
   }
 
+  function applyTemplate(template: ExperimentTemplate) {
+    setSelectedTemplateId(template.id);
+    setAiGoal(buildAiGoalFromTemplate(template));
+    setOwnTitle(template.name);
+    setOwnGoal(template.goal);
+    setOwnTheory(template.theoryStarter);
+    setOwnTracking(buildTrackingFieldFromTemplate(template));
+    setOwnCategory(template.category);
+    setAiError(null);
+    setOwnError(null);
+  }
+
+  function startFromScratch() {
+    setSelectedTemplateId(null);
+    setAiGoal("");
+    setOwnTitle("");
+    setOwnGoal("");
+    setOwnTheory("");
+    setOwnTracking("");
+    setOwnCategory("Physical");
+    setAiError(null);
+    setOwnError(null);
+  }
+
+  function buildOwnTheoryForSubmit(): string {
+    const body = ownTheory.trim();
+    const tracking = ownTracking.trim();
+    if (!tracking) return body;
+    return `${body}\n\nWhat I'll track: ${tracking}`;
+  }
+
   async function handleAiSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!aiGoal.trim()) return;
@@ -507,7 +503,7 @@ function CreatePageContent() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           title: ownTitle.trim(), goal: ownGoal.trim(),
-          theory: ownTheory.trim(), protocol: "", category: ownCategory,
+          theory: buildOwnTheoryForSubmit(), protocol: "", category: ownCategory,
         }),
       });
       const data = await res.json();
@@ -655,12 +651,23 @@ function CreatePageContent() {
     ? ownResult.blocks.filter((b) => ownSelectedIds.has(b.id) && !ownPublishedIds.has(b.id))
     : [];
 
+  const showTemplatePicker = !aiResult && !ownResult && !aiLoading && !ownLoading;
+
   return (
     <div className="pb-24">
       <h1 className="text-xl font-semibold text-foreground mb-1">Create</h1>
       <p className="text-sm text-muted-foreground mb-6">
         Generate a theory with AI, or write your own and have it cross-referenced with research.
       </p>
+
+      {showTemplatePicker && (
+        <ExperimentTemplatePicker
+          selectedId={selectedTemplateId}
+          onSelect={applyTemplate}
+          onStartFromScratch={startFromScratch}
+          className="mb-8 max-w-4xl"
+        />
+      )}
 
       <Tabs defaultValue="ai" className="w-full">
         <TabsList className="mb-8">
@@ -670,14 +677,34 @@ function CreatePageContent() {
 
         {/* ── AI Generate ── */}
         <TabsContent value="ai">
-          <form onSubmit={handleAiSubmit} className="space-y-3 max-w-lg">
-            <Textarea
+          <form onSubmit={handleAiSubmit} className="space-y-5 max-w-2xl">
+            <SuggestedGoalsPicker
               value={aiGoal}
-              onChange={(e) => setAiGoal(e.target.value)}
-              placeholder="e.g. Improve focus and energy with better sleep and morning light"
-              rows={3}
-              required
+              onSelect={(goal) => {
+                setAiGoal(goal);
+                setSelectedTemplateId(null);
+              }}
             />
+
+            <div className="space-y-1.5 pt-1 border-t border-border">
+              <Label htmlFor="ai-goal">Write your own goal</Label>
+              <Textarea
+                id="ai-goal"
+                value={aiGoal}
+                onChange={(e) => {
+                  setAiGoal(e.target.value);
+                  setSelectedTemplateId(null);
+                }}
+                placeholder="e.g. Improve focus and energy with better sleep and morning light"
+                rows={3}
+                required
+              />
+              {ownTracking.trim() && selectedTemplateId && (
+                <p className="text-xs text-muted-foreground">
+                  Suggested tracking: {ownTracking}
+                </p>
+              )}
+            </div>
             <Button type="submit" disabled={aiLoading}>
               {aiLoading ? "Searching PubMed & generating…" : "Generate theory blocks"}
             </Button>
@@ -703,7 +730,7 @@ function CreatePageContent() {
                 </div>
               )}
               <p className="text-xs text-muted-foreground mb-4">
-                Click <span className="text-foreground font-medium">+ Add</span> on the blocks you want, then publish them individually or together.
+                Review the blocks below — each tier reflects how strong the evidence is for a different angle on your goal.
               </p>
               <div className="space-y-8">
                 {TIERS.map((tier) => {
@@ -726,9 +753,6 @@ function CreatePageContent() {
                             key={block.id}
                             block={block}
                             articles={aiResult.articles}
-                            isSelected={selectedIds.has(block.id)}
-                            onToggleSelect={toggleSelectAi}
-                            isPublished={publishedIds.has(block.id)}
                           />
                         ))}
                       </div>
@@ -743,35 +767,68 @@ function CreatePageContent() {
         {/* ── Write Your Own ── */}
         <TabsContent value="own">
           {!ownResult ? (
-            <form onSubmit={handleOwnSubmit} className="space-y-5 max-w-lg">
+            <form onSubmit={handleOwnSubmit} className="space-y-5 max-w-2xl">
               <div className="space-y-1.5">
-                <Label htmlFor="theory-name">Theory name</Label>
+                <Label htmlFor="theory-name">Experiment name</Label>
                 <Input
                   id="theory-name"
                   value={ownTitle}
-                  onChange={(e) => setOwnTitle(e.target.value)}
-                  placeholder="e.g. Melanin preservation through PTH suppression"
+                  onChange={(e) => {
+                    setOwnTitle(e.target.value);
+                    setSelectedTemplateId(null);
+                  }}
+                  placeholder="e.g. Sleep quality after 40"
                   required
                 />
               </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="health-goal">Health goal</Label>
+
+              <SuggestedGoalsPicker
+                value={ownGoal}
+                onSelect={(goal) => {
+                  setOwnGoal(goal);
+                  setSelectedTemplateId(null);
+                }}
+              />
+
+              <div className="space-y-1.5 pt-1 border-t border-border">
+                <Label htmlFor="health-goal">Write your own goal</Label>
                 <Input
                   id="health-goal"
                   value={ownGoal}
-                  onChange={(e) => setOwnGoal(e.target.value)}
+                  onChange={(e) => {
+                    setOwnGoal(e.target.value);
+                    setSelectedTemplateId(null);
+                  }}
                   placeholder="What outcome are you trying to achieve?"
                   required
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="theory-body">Your theory</Label>
-                <p className="text-xs text-muted-foreground">Explain what you believe is happening biologically. Include any protocols, supplements, or lifestyle changes you have in mind — AI will extract and organize them automatically.</p>
+                <Label htmlFor="tracking-metrics">Suggested tracking</Label>
+                <Input
+                  id="tracking-metrics"
+                  value={ownTracking}
+                  onChange={(e) => {
+                    setOwnTracking(e.target.value);
+                    setSelectedTemplateId(null);
+                  }}
+                  placeholder="e.g. Energy rating, sleep hours, stress level"
+                />
+                <p className="text-xs text-muted-foreground">
+                  What you&apos;ll check in on regularly. Separate items with commas.
+                </p>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="theory-body">Your plan in your own words</Label>
+                <p className="text-xs text-muted-foreground">Describe what you want to try and why. Include habits, supplements, or lifestyle changes — AI will organize them.</p>
                 <Textarea
                   id="theory-body"
                   value={ownTheory}
-                  onChange={(e) => setOwnTheory(e.target.value)}
-                  placeholder="e.g. I believe that keeping PTH levels low by supplementing 1000mg calcium, 400mg magnesium glycinate, and 3mg boron daily tells the body it has sufficient vitamin D, reducing the enzymatic breakdown of melanin. Morning sunlight exposure for 15-20 minutes without sunscreen may also help by naturally boosting vitamin D synthesis..."
+                  onChange={(e) => {
+                    setOwnTheory(e.target.value);
+                    setSelectedTemplateId(null);
+                  }}
+                  placeholder="e.g. I want to improve sleep by testing a fixed bedtime, less screen time after 9pm, and morning light within an hour of waking..."
                   rows={7}
                   required
                 />
@@ -781,7 +838,10 @@ function CreatePageContent() {
                 <Select
                   id="category"
                   value={ownCategory}
-                  onChange={(e) => setOwnCategory(e.target.value)}
+                  onChange={(e) => {
+                    setOwnCategory(e.target.value);
+                    setSelectedTemplateId(null);
+                  }}
                 >
                   {GOAL_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
                 </Select>
@@ -819,19 +879,8 @@ function CreatePageContent() {
               )}
 
               <p className="text-xs text-muted-foreground">
-                AI segmented your theory by evidence strength. Click <span className="text-foreground font-medium">+ Add</span> on the blocks you want, then publish them all at once.
+                AI segmented your theory by evidence strength — review each block below.
               </p>
-
-              {/* Select all button */}
-              {ownResult.blocks && ownResult.blocks.length > 1 && (
-                <button
-                  type="button"
-                  onClick={selectAllOwn}
-                  className="text-xs text-primary font-medium hover:opacity-80 transition-opacity"
-                >
-                  + Select all blocks
-                </button>
-              )}
 
               {/* Multi-block: show blocks grouped by tier */}
               {ownResult.blocks && ownResult.blocks.length > 1 ? (
@@ -856,11 +905,6 @@ function CreatePageContent() {
                               key={block.id}
                               block={block}
                               articles={ownResult.articles}
-                              onPublish={() => handlePublishOwnBlock(block)}
-                              isPublished={ownPublishedIds.has(block.id)}
-                              isPublishing={ownPublishingId === block.id}
-                              isSelected={ownSelectedIds.has(block.id)}
-                              onToggleSelect={toggleSelectOwn}
                             />
                           ))}
                         </div>
@@ -873,9 +917,6 @@ function CreatePageContent() {
                 <EvaluatedBlock
                   block={ownResult.block}
                   articles={ownResult.articles}
-                  onPublish={handlePublishOwn}
-                  isPublished={ownPublished}
-                  isPublishing={ownPublishing}
                 />
               )}
 
@@ -889,50 +930,6 @@ function CreatePageContent() {
           )}
         </TabsContent>
       </Tabs>
-
-      {/* Sticky publish bar — AI blocks */}
-      {unpublishedSelected.length > 0 && (
-        <div className="fixed bottom-0 left-0 right-0 z-20 flex justify-center pb-6 pointer-events-none">
-          <div className="pointer-events-auto flex items-center gap-3 bg-card border border-border rounded-2xl px-5 py-3 shadow-2xl">
-            <div className="flex -space-x-1">
-              {unpublishedSelected.map((b) => (
-                <span key={b.id}
-                  className={cn("w-2.5 h-2.5 rounded-full border-2 border-card", TIER_CONFIG[b.evidenceTier].dot)}
-                />
-              ))}
-            </div>
-            <span className="text-sm text-muted-foreground">
-              <span className="font-semibold text-foreground">{unpublishedSelected.length}</span>{" "}
-              {unpublishedSelected.length === 1 ? "block" : "blocks"} selected
-            </span>
-            <Button size="sm" onClick={handlePublishAiSelected} disabled={publishingAll}>
-              {publishingAll ? "Publishing…" : "Publish →"}
-            </Button>
-          </div>
-        </div>
-      )}
-
-      {/* Sticky publish bar — User theory blocks */}
-      {ownUnpublishedSelected.length > 0 && (
-        <div className="fixed bottom-0 left-0 right-0 z-20 flex justify-center pb-6 pointer-events-none">
-          <div className="pointer-events-auto flex items-center gap-3 bg-card border border-border rounded-2xl px-5 py-3 shadow-2xl">
-            <div className="flex -space-x-1">
-              {ownUnpublishedSelected.map((b) => (
-                <span key={b.id}
-                  className={cn("w-2.5 h-2.5 rounded-full border-2 border-card", TIER_CONFIG[b.evidenceTier].dot)}
-                />
-              ))}
-            </div>
-            <span className="text-sm text-muted-foreground">
-              <span className="font-semibold text-foreground">{ownUnpublishedSelected.length}</span>{" "}
-              {ownUnpublishedSelected.length === 1 ? "block" : "blocks"} selected
-            </span>
-            <Button size="sm" onClick={handlePublishOwnSelected} disabled={ownPublishingAll}>
-              {ownPublishingAll ? "Publishing…" : "Publish →"}
-            </Button>
-          </div>
-        </div>
-      )}
 
       <LoginModal
         isOpen={loginModalOpen}

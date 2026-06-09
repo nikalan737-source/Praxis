@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { motion, useScroll, useTransform, AnimatePresence } from "framer-motion";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { AnimatePresence, motion, useScroll, useTransform } from "framer-motion";
 import {
   Target,
   Lightbulb,
@@ -23,7 +23,7 @@ const GOAL_TAGS = [
   "Performance",
   "Sleep",
   "Energy",
-  "Dopamine",
+  "Focus",
 ];
 
 const Step0Visual = ({ active }: { active: boolean }) => (
@@ -65,7 +65,7 @@ const Step1Visual = ({ active }: { active: boolean }) => {
       <div className="w-full max-w-md rounded-2xl border border-white/10 bg-white/5 p-5 backdrop-blur-md shadow-[inset_0_1px_0_0_hsl(0_0%_100%/0.08)]">
         <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-[0.2em] text-emerald-300/80">
           <Lightbulb className="h-3.5 w-3.5" />
-          Your theory
+          Your goal
         </div>
         <div className="mt-4 min-h-[6rem] text-base leading-relaxed text-white/90">
           {typed}
@@ -108,7 +108,7 @@ const Step2Visual = ({ active }: { active: boolean }) => {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-[0.2em] text-emerald-300/80">
             <Search className="h-3.5 w-3.5" />
-            Searching PubMed
+            Searching research papers
           </div>
           <span className="text-xs text-white/50">{count}/{PAPERS.length}</span>
         </div>
@@ -142,9 +142,9 @@ const Step2Visual = ({ active }: { active: boolean }) => {
 };
 
 const TIERS = [
-  { label: "Strong", desc: "Multiple RCTs, consistent effect", color: "bg-emerald-400", ring: "ring-emerald-400/30" },
-  { label: "Emerging", desc: "Promising but limited evidence", color: "bg-amber-400", ring: "ring-amber-400/30" },
-  { label: "Theoretical", desc: "Mechanism plausible, untested", color: "bg-sky-400", ring: "ring-sky-400/30" },
+  { label: "Strong", desc: "Several solid studies, results line up", color: "bg-emerald-400", ring: "ring-emerald-400/30" },
+  { label: "Emerging", desc: "Looks good, not much human data yet", color: "bg-amber-400", ring: "ring-amber-400/30" },
+  { label: "Early idea", desc: "Makes sense on paper, not really tested", color: "bg-sky-400", ring: "ring-sky-400/30" },
 ];
 
 const Step3Visual = ({ active }: { active: boolean }) => (
@@ -186,7 +186,7 @@ const Step4Visual = ({ active }: { active: boolean }) => (
     >
       <div className="flex items-center justify-between">
         <div>
-          <div className="text-xs font-medium uppercase tracking-[0.2em] text-emerald-300/80">Protocol</div>
+          <div className="text-xs font-medium uppercase tracking-[0.2em] text-emerald-300/80">Your plan</div>
           <div className="mt-1 font-display text-lg font-semibold text-white">Sleep Quality v1</div>
         </div>
         <div className="rounded-full border border-emerald-400/30 bg-emerald-400/10 px-3 py-1 text-xs font-medium text-emerald-200">
@@ -262,86 +262,108 @@ const STEPS: Step[] = [
     icon: Target,
     eyebrow: "Step 0",
     title: "What's your goal?",
-    body: "Pick the area of your life you want to move. Praxis works across performance, mood, recovery, sleep, and more.",
+    body: "Pick what you want to work on. Sleep, mood, energy, recovery — Praxis meets you where you are.",
     Visual: Step0Visual,
   },
   {
     n: "01",
     icon: Lightbulb,
     eyebrow: "Step 1",
-    title: "You have a theory",
-    body: "Tell Praxis what you think might work. Your hypothesis becomes the starting point for a real experiment.",
+    title: "Say it in your own words",
+    body: "Tell Praxis what you want to try. Your goal is the starting point. We help you test what works.",
     Visual: Step1Visual,
   },
   {
     n: "02",
     icon: Search,
     eyebrow: "Step 2",
-    title: "We search the science",
-    body: "Praxis pulls from PubMed and ranked sources to find what the literature actually says about your theory.",
+    title: "We dig into the research",
+    body: "Praxis scans trusted medical research and summarizes what it says about your situation — in plain language.",
     Visual: Step2Visual,
   },
   {
     n: "03",
     icon: ListChecks,
     eyebrow: "Step 3",
-    title: "Theories ranked by evidence",
-    body: "Every approach gets a tier — strong, emerging, or theoretical — so you know what's backed and what's a bet.",
+    title: "Ideas ranked by how solid the science is",
+    body: "Each approach gets a simple label: strong support, early promise, or still mostly an idea. You see the tradeoffs.",
     Visual: Step3Visual,
   },
   {
     n: "04",
     icon: ClipboardCheck,
     eyebrow: "Step 4",
-    title: "Your protocol is built",
-    body: "Praxis turns the evidence into a clean, daily checklist you can actually follow. No fluff, just what matters.",
+    title: "You get a clear daily plan",
+    body: "We turn what the research supports into a short daily checklist you can actually follow.",
     Visual: Step4Visual,
   },
   {
     n: "05",
     icon: Users,
     eyebrow: "Step 5",
-    title: "Real results from real people",
-    body: "See what happened to others who ran the same protocol. Real ratings, real quotes, real proof.",
+    title: "Real people, real outcomes",
+    body: "See how others with a similar plan rated how they felt. Honest numbers and short quotes — no hype.",
     Visual: Step5Visual,
   },
 ];
 
 /* ------------------------------ Section ------------------------------ */
 
+const STEP_COUNT = STEPS.length;
+
+const StickyStepVisuals = ({ active }: { active: number }) => (
+  <div className="relative h-full w-full">
+    {STEPS.map((step, i) => {
+      const V = step.Visual;
+      const isActive = i === active;
+      return (
+        <div
+          key={step.n}
+          aria-hidden={!isActive}
+          className={`absolute inset-0 h-full w-full transition-opacity duration-300 ease-out ${
+            isActive ? "z-10 opacity-100" : "z-0 opacity-0 pointer-events-none"
+          }`}
+        >
+          <V active={isActive} />
+        </div>
+      );
+    })}
+  </div>
+);
+
 const StepRow = ({
   step,
   index,
   total,
-  onActive,
+  registerStep,
 }: {
   step: Step;
   index: number;
   total: number;
-  onActive: (i: number) => void;
+  registerStep: (index: number, el: HTMLElement | null) => void;
 }) => {
-  const ref = useRef<HTMLDivElement>(null);
+  const rowRef = useRef<HTMLDivElement | null>(null);
+
+  const setRowRef = useCallback(
+    (node: HTMLDivElement | null) => {
+      rowRef.current = node;
+      registerStep(index, node);
+    },
+    [index, registerStep]
+  );
+
   const { scrollYProgress } = useScroll({
-    target: ref,
-    offset: ["start 60%", "end 40%"],
+    target: rowRef,
+    offset: ["start 55%", "end 45%"],
   });
 
-  const opacity = useTransform(scrollYProgress, [0, 0.25, 0.75, 1], [0.3, 1, 1, 0.3]);
-
-  useEffect(() => {
-    return scrollYProgress.on("change", (v) => {
-      if (v > 0.15 && v < 0.95) onActive(index);
-    });
-  }, [scrollYProgress, index, onActive]);
+  const opacity = useTransform(scrollYProgress, [0, 0.2, 0.8, 1], [0.35, 1, 1, 0.35]);
 
   const { Visual, icon: Icon } = step;
 
   return (
-    <motion.div
-      ref={ref}
-      style={{ opacity }}
-      className="min-h-[70vh] py-16"
-    >
+    <div ref={setRowRef} data-step-index={index} className="min-h-[70vh] py-16">
+      <motion.div style={{ opacity }}>
       {/* Text */}
       <div>
         <div className="flex items-center gap-3 text-xs font-semibold uppercase tracking-[0.25em] text-emerald-300">
@@ -370,12 +392,71 @@ const StepRow = ({
           <Visual active />
         </div>
       </div>
-    </motion.div>
+      </motion.div>
+    </div>
   );
 };
 
 const HowItWorks = () => {
   const [active, setActive] = useState(0);
+  const stepElementsRef = useRef<(HTMLElement | null)[]>([]);
+  const observerRef = useRef<IntersectionObserver | null>(null);
+  const ratiosRef = useRef<number[]>(Array(STEP_COUNT).fill(0));
+
+  const registerStep = useCallback((index: number, el: HTMLElement | null) => {
+    const prev = stepElementsRef.current[index];
+    stepElementsRef.current[index] = el;
+
+    const observer = observerRef.current;
+    if (!observer) return;
+    if (prev && prev !== el) observer.unobserve(prev);
+    if (el) observer.observe(el);
+  }, []);
+
+  useEffect(() => {
+    const ratios = ratiosRef.current;
+
+    const pickMostVisible = () => {
+      let bestIdx = 0;
+      let bestRatio = -1;
+      for (let i = 0; i < STEP_COUNT; i++) {
+        if (ratios[i] > bestRatio) {
+          bestRatio = ratios[i];
+          bestIdx = i;
+        }
+      }
+      if (bestRatio > 0) {
+        setActive((prev) => (prev === bestIdx ? prev : bestIdx));
+      }
+    };
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          const idx = Number((entry.target as HTMLElement).dataset.stepIndex);
+          if (Number.isNaN(idx) || idx < 0 || idx >= STEP_COUNT) continue;
+          ratios[idx] = entry.isIntersecting ? entry.intersectionRatio : 0;
+        }
+        pickMostVisible();
+      },
+      {
+        root: null,
+        rootMargin: "-40% 0px -40% 0px",
+        threshold: [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1],
+      }
+    );
+
+    observerRef.current = observer;
+    stepElementsRef.current.forEach((el) => {
+      if (el) observer.observe(el);
+    });
+
+    return () => {
+      observer.disconnect();
+      observerRef.current = null;
+      ratios.fill(0);
+    };
+  }, []);
 
   return (
     <section id="how" className="relative bg-[hsl(220_30%_8%)] text-white">
@@ -397,10 +478,10 @@ const HowItWorks = () => {
             How it works
           </span>
           <h2 className="mt-4 font-display text-3xl font-bold tracking-tight text-white sm:text-4xl md:text-5xl">
-            From a hunch to hard evidence
+            From real life to a plan you can test
           </h2>
           <p className="mt-5 text-base leading-relaxed text-white/60">
-            Scroll through the journey. Every step is built on real science and real results.
+            Scroll through the steps. Built for busy adults when generic advice stops matching how you feel.
           </p>
         </div>
 
@@ -408,29 +489,15 @@ const HowItWorks = () => {
           {/* Left: scrolling text rows */}
           <div>
             {STEPS.map((s, i) => (
-              <StepRow key={s.n} step={s} index={i} total={STEPS.length} onActive={setActive} />
+              <StepRow key={s.n} step={s} index={i} total={STEPS.length} registerStep={registerStep} />
             ))}
           </div>
 
           {/* Right: sticky visual (desktop only) */}
           <div className="hidden md:block">
-            <div className="sticky top-24">
+            <div className="sticky top-24 h-fit">
               <div className="relative h-[480px] w-full overflow-hidden rounded-3xl border border-white/10 bg-white/[0.02] backdrop-blur-md shadow-[inset_0_1px_0_0_hsl(0_0%_100%/0.06),0_30px_80px_-30px_hsl(155_60%_30%/0.4)]">
-                <AnimatePresence mode="wait">
-                  <motion.div
-                    key={active}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -20 }}
-                    transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-                    className="absolute inset-0"
-                  >
-                    {(() => {
-                      const V = STEPS[active].Visual;
-                      return <V active />;
-                    })()}
-                  </motion.div>
-                </AnimatePresence>
+                <StickyStepVisuals active={active} />
 
                 {/* Step indicator */}
                 <div className="pointer-events-none absolute bottom-5 left-1/2 flex -translate-x-1/2 gap-1.5">

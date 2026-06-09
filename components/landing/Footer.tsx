@@ -9,7 +9,7 @@ const Footer = () => {
             <Beaker className="h-3.5 w-3.5" />
           </span>
           <span className="font-display font-bold">Praxis</span>
-          <span className="ml-2 text-xs text-muted-foreground">Test what works. For you.</span>
+          <span className="ml-2 text-xs text-muted-foreground">Clear next steps — for the body you have now.</span>
         </div>
         <div className="flex items-center gap-6 text-xs text-muted-foreground">
           <a href="#" className="hover:text-foreground">Privacy</a>

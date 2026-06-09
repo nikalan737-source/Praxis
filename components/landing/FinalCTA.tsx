@@ -10,10 +10,10 @@ const FinalCTA = () => {
           <div aria-hidden className="pointer-events-none absolute inset-0 bg-hero-glow" />
           <div className="relative">
             <h2 className="font-display text-3xl font-bold tracking-tight sm:text-4xl md:text-5xl text-foreground">
-              Start your first protocol today.
+              Meet your body where it is today.
             </h2>
             <p className="mx-auto mt-4 max-w-xl text-muted-foreground">
-              Generate a plan. See what works.
+              Build a clear plan from trusted research. Then live your week and see what actually helps.
             </p>
             <Button
               asChild
@@ -21,8 +21,8 @@ const FinalCTA = () => {
               variant="default"
               className="mt-8 h-12 px-7 text-base font-semibold rounded-full"
             >
-              <Link href="/community">
-                Try Praxis Free
+              <Link href="/create">
+                Build my plan
                 <ArrowRight className="h-4 w-4" />
               </Link>
             </Button>

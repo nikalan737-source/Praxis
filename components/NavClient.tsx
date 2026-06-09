@@ -10,7 +10,6 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 const links = [
-  { href: "/community", label: "Community" },
   { href: "/create", label: "Create" },
   { href: "/profile", label: "Profile" },
 ];

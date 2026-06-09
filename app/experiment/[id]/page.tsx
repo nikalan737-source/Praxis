@@ -319,7 +319,6 @@ function CompleteModal({
 }) {
   const [outcomeRating, setOutcomeRating] = useState(experiment.outcomeRating ?? 5);
   const [finalNotes, setFinalNotes] = useState(experiment.notes || "");
-  const [makePublic, setMakePublic] = useState(experiment.isPublic);
   const [saving, setSaving] = useState(false);
 
   async function handleSave() {
@@ -332,11 +331,17 @@ function CompleteModal({
         endedAt: todayStr(),
         outcomeRating,
         notes: finalNotes.trim(),
-        isPublic: makePublic,
+        isPublic: experiment.isPublic,
       }),
     });
     if (res.ok) {
-      onCompleted({ status: "completed", endedAt: todayStr(), outcomeRating, notes: finalNotes.trim(), isPublic: makePublic });
+      onCompleted({
+        status: "completed",
+        endedAt: todayStr(),
+        outcomeRating,
+        notes: finalNotes.trim(),
+        isPublic: experiment.isPublic,
+      });
       onClose();
     }
     setSaving(false);
@@ -347,7 +352,7 @@ function CompleteModal({
       <Card className="w-full max-w-md mx-4" onClick={(e) => e.stopPropagation()}>
         <CardHeader className="p-5 pb-3">
           <h3 className="font-semibold text-foreground">Wrap up protocol</h3>
-          <p className="text-xs text-muted-foreground mt-0.5">Rate your overall outcome and optionally share with the community.</p>
+          <p className="text-xs text-muted-foreground mt-0.5">Rate your overall outcome and add any final notes.</p>
         </CardHeader>
         <CardContent className="p-5 pt-0 space-y-4">
           <div className="space-y-1.5">
@@ -359,16 +364,6 @@ function CompleteModal({
           <div className="space-y-1.5">
             <Label className="text-xs">Final thoughts <span className="text-muted-foreground font-normal">(optional)</span></Label>
             <Textarea rows={3} value={finalNotes} onChange={(e) => setFinalNotes(e.target.value)} placeholder="How did it go? What did you learn?" />
-          </div>
-          <div className="flex items-center gap-2.5">
-            <button type="button" onClick={() => setMakePublic(!makePublic)}
-              className={cn("w-9 h-5 rounded-full transition-colors relative", makePublic ? "bg-primary" : "bg-border")}>
-              <div className={cn("absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform", makePublic ? "translate-x-4" : "translate-x-0.5")} />
-            </button>
-            <div>
-              <p className="text-xs text-foreground font-medium">Share with community</p>
-              <p className="text-[10px] text-muted-foreground">Others can see your results and learn from your experience</p>
-            </div>
           </div>
           <div className="flex gap-2 pt-1">
             <Button size="sm" onClick={handleSave} disabled={saving}>{saving ? "Saving…" : "Complete Protocol"}</Button>
@@ -395,7 +390,6 @@ export default function ExperimentPage() {
   const [loading, setLoading] = useState(true);
   const [showNewEntry, setShowNewEntry] = useState(false);
   const [showCompleteModal, setShowCompleteModal] = useState(false);
-  const [publishToggling, setPublishToggling] = useState(false);
 
   const fetchData = useCallback(async () => {
     if (!experimentId) return;
@@ -458,7 +452,7 @@ export default function ExperimentPage() {
   }, [experimentId]);
 
   useEffect(() => {
-    if (!authLoading && !user) router.replace("/community");
+    if (!authLoading && !user) router.replace("/");
   }, [user, authLoading, router]);
 
   useEffect(() => {
@@ -476,19 +470,6 @@ export default function ExperimentPage() {
 
   function handleCompleted(updates: Partial<ExperimentRecord>) {
     setExperiment((prev) => prev ? { ...prev, ...updates } : prev);
-  }
-
-  async function togglePublic() {
-    if (!experiment || publishToggling) return;
-    setPublishToggling(true);
-    const newVal = !experiment.isPublic;
-    const res = await fetch(`/api/experiment-logs/${experiment.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ isPublic: newVal }),
-    });
-    if (res.ok) setExperiment((prev) => prev ? { ...prev, isPublic: newVal } : prev);
-    setPublishToggling(false);
   }
 
   const adherence = useMemo(
@@ -542,9 +523,6 @@ export default function ExperimentPage() {
           <Badge variant={isActive ? "default" : "secondary"} className="text-[10px]">
             {isActive ? "Active" : "Completed"}
           </Badge>
-          {experiment.isPublic && (
-            <Badge variant="secondary" className="text-[10px]">Public</Badge>
-          )}
           {settings?.primaryMetric && (
             <span className="text-[11px] text-muted-foreground italic">
               Tracking: {settings.primaryMetric}
@@ -668,9 +646,6 @@ export default function ExperimentPage() {
             </Button>
           </>
         )}
-        <Button variant="ghost" size="sm" onClick={togglePublic} disabled={publishToggling} className="ml-auto text-xs">
-          {publishToggling ? "…" : experiment.isPublic ? "Make Private" : "Share Publicly"}
-        </Button>
       </div>
 
       {/* ── Check-in Form ── */}

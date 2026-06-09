@@ -1,8 +1,14 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import type { LucideIcon } from "lucide-react";
 import { Plus, Search, Sparkles } from "lucide-react";
-import { HEALTH_TAG_PRESETS, PRESET_LABEL_SET } from "@/lib/health-tag-presets";
+import {
+  FEATURED_HEALTH_TAG_PRESETS,
+  HEALTH_TAG_PRESETS,
+  HEALTH_TAG_PRESETS_BY_CATEGORY,
+  PRESET_LABEL_SET,
+} from "@/lib/health-tag-presets";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -51,6 +57,46 @@ export function HealthTagsEditor({
     if (!q) return HEALTH_TAG_PRESETS;
     return HEALTH_TAG_PRESETS.filter((p) => p.label.toLowerCase().includes(q));
   }, [q]);
+
+  const showGrouped = !q;
+
+  function renderPresetButton({ label, Icon }: { label: string; Icon: LucideIcon }) {
+    const active = selectedSet.has(label.toLowerCase());
+    const disabled = !active && atLimit;
+    return (
+      <button
+        key={label}
+        type="button"
+        disabled={disabled}
+        onClick={() => toggle(label)}
+        className={cn(
+          "rounded-xl border text-left p-3 transition-all duration-200 flex flex-col gap-2 min-h-[92px]",
+          "hover:shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+          disabled && "opacity-50 cursor-not-allowed hover:shadow-none",
+          active
+            ? "border-primary bg-primary/12 shadow-[inset_0_1px_0_0_hsl(var(--primary)/0.12)] ring-1 ring-primary/25"
+            : "border-border bg-card/90 hover:bg-muted/40"
+        )}
+      >
+        <span
+          className={cn(
+            "inline-flex h-9 w-9 items-center justify-center rounded-lg shrink-0",
+            active ? "bg-primary/20 text-primary" : "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
+          )}
+        >
+          <Icon className="h-4 w-4" aria-hidden />
+        </span>
+        <span
+          className={cn(
+            "text-xs font-medium leading-snug",
+            active ? "text-foreground" : "text-foreground/90"
+          )}
+        >
+          {label}
+        </span>
+      </button>
+    );
+  }
 
   const customSelected = useMemo(
     () => selected.filter((t) => !PRESET_LABEL_SET.has(t)),
@@ -125,45 +171,38 @@ export function HealthTagsEditor({
         />
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-        {filteredPresets.map(({ label, Icon }) => {
-          const active = selectedSet.has(label.toLowerCase());
-          const disabled = !active && atLimit;
-          return (
-            <button
-              key={label}
-              type="button"
-              disabled={disabled}
-              onClick={() => toggle(label)}
-              className={cn(
-                "rounded-xl border text-left p-3 transition-all duration-200 flex flex-col gap-2 min-h-[92px]",
-                "hover:shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
-                disabled && "opacity-50 cursor-not-allowed hover:shadow-none",
-                active
-                  ? "border-primary bg-primary/12 shadow-[inset_0_1px_0_0_hsl(var(--primary)/0.12)] ring-1 ring-primary/25"
-                  : "border-border bg-card/90 hover:bg-muted/40"
-              )}
-            >
-              <span
-                className={cn(
-                  "inline-flex h-9 w-9 items-center justify-center rounded-lg shrink-0",
-                  active ? "bg-primary/20 text-primary" : "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
-                )}
-              >
-                <Icon className="h-4 w-4" aria-hidden />
-              </span>
-              <span
-                className={cn(
-                  "text-xs font-medium leading-snug",
-                  active ? "text-foreground" : "text-foreground/90"
-                )}
-              >
-                {label}
-              </span>
-            </button>
-          );
-        })}
+      <div className="space-y-5">
+        {showGrouped ? (
+          <>
+            <div>
+              <p className="mb-2.5 text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                Common for you
+              </p>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                {FEATURED_HEALTH_TAG_PRESETS.map(renderPresetButton)}
+              </div>
+            </div>
 
+            {HEALTH_TAG_PRESETS_BY_CATEGORY.map(({ id, label, presets }) =>
+              presets.length > 0 ? (
+                <div key={id}>
+                  <p className="mb-2.5 text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                    {label}
+                  </p>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                    {presets.map(renderPresetButton)}
+                  </div>
+                </div>
+              ) : null
+            )}
+          </>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+            {filteredPresets.map(renderPresetButton)}
+          </div>
+        )}
+
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
         {filteredCustoms.map((label) => {
           const active = selectedSet.has(label.toLowerCase());
           const disabled = !active && atLimit;
@@ -258,6 +297,7 @@ export function HealthTagsEditor({
             </div>
           </div>
         )}
+        </div>
       </div>
     </div>
   );

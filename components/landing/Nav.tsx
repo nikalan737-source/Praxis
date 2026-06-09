@@ -22,7 +22,6 @@ const Nav = () => {
             Praxis
           </a>
           <nav className="hidden items-center gap-8 text-sm text-muted-foreground md:flex">
-            <Link href="/community" className="transition-colors hover:text-foreground">Community</Link>
             <Link href="/create" className="transition-colors hover:text-foreground">Create</Link>
             <Link href="/profile" className="transition-colors hover:text-foreground">Profile</Link>
           </nav>
@@ -53,7 +52,7 @@ const Nav = () => {
                     Sign in
                   </Button>
                   <Button asChild size="sm" className="rounded-full px-5 font-semibold">
-                    <Link href="/community">Try Free</Link>
+                    <Link href="/create">Build my plan</Link>
                   </Button>
                 </div>
               )}
